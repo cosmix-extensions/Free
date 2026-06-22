@@ -38,8 +38,8 @@ class Dsvplay : StreamWishExtractor() {
 }
 
 class FilePress : ExtractorApi() {
-    override val name = "FilePress"
-    override val mainUrl = "https://filepress.wiki"
+    override var name = "FilePress"
+    override var mainUrl = "https://filepress.wiki"
     override val requiresReferer = false
 
     override suspend fun getUrl(
@@ -49,30 +49,40 @@ class FilePress : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-            val response = app.post(
-                url.replace("/file/", "/api/file/down/"),
-                data = mapOf("id" to url.substringAfterLast("/"))
-            ).parsedSafe<Map<String, String>>()
+            val fileId = url.trimEnd('/').split("/").last()
+            val api1 = "https://new3.filepress.live/api/file/downlaod/"
+            val res1 = app.post(api1, headers = mapOf("Referer" to url), json = mapOf("id" to fileId, "method" to "cloudR2Downlaod")).parsedSafe<Map<String, Any>>()
             
-            response?.get("data")?.let { directUrl ->
-                callback.invoke(
-                    newExtractorLink(
-                        this.name,
-                        "FilePress Direct",
-                        directUrl,
-                        ExtractorLinkType.VIDEO
-                    ) {
-                        this.quality = Qualities.Unknown.value
-                    }
-                )
+            val data1 = res1?.get("data") as? Map<String, Any> ?: res1?.get("data") as? Map<*, *>
+            val downloadId = data1?.get("downloadId")?.toString()
+            
+            if (downloadId != null) {
+                val api2 = "https://new3.filepress.live/api/file/downlaod2/"
+                val res2 = app.post(api2, headers = mapOf("Referer" to url), json = mapOf("id" to downloadId, "method" to "cloudR2Downlaod")).parsedSafe<Map<String, Any>>()
+                
+                val finalUrl = res2?.get("data")?.toString()
+                if (finalUrl != null && finalUrl.startsWith("http")) {
+                    callback.invoke(
+                        ExtractorLink(
+                            "FilePress",
+                            "FilePress",
+                            finalUrl,
+                            url,
+                            Qualities.Unknown.value,
+                            true
+                        )
+                    )
+                }
             }
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
 
 class GDFlix : ExtractorApi() {
-    override val name = "GDFlix"
-    override val mainUrl = "https://gdflix.dev"
+    override var name = "GDFlix"
+    override var mainUrl = "https://gdflix.dev"
     override val requiresReferer = false
 
     override suspend fun getUrl(
@@ -81,46 +91,65 @@ class GDFlix : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        suspend fun resolve(targetUrl: String, depth: Int = 0) {
-            if (depth > 2) return
-            try {
-                val doc = app.get(targetUrl).document
-                val validLinks = doc.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
+        try {
+            val response = app.get(url)
+            val keyRegex = Regex(""""key",\s*"(.*?)"""")
+            val key = keyRegex.find(response.text)?.groupValues?.get(1)
+
+            if (key != null) {
+                val boundary = "----WebKitFormBoundaryi3pOrWU7hGYfwwL4"
+                val host = java.net.URI(url).host
                 
-                val unpacked = doc.select("script").mapNotNull { it.data() }.firstOrNull { it.contains("eval(function(p,a,c,k,e,d)") }
-                if (unpacked != null) {
-                    val decoded = JsUnpacker(unpacked).unpack()
-                    // Extract urls from decoded js
-                    val jsLinks = Regex("https?://[^\"']+").findAll(decoded ?: "").map { it.value }.toList()
-                    jsLinks.forEach { link ->
-                        if (link.contains("r2.dev") || link.contains("worker")) {
-                            callback.invoke(newExtractorLink(name, "GDFlix [Packed]", link, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
-                        }
+                val reqBody = okhttp3.RequestBody.create(
+                    okhttp3.MediaType.parse("multipart/form-data; boundary=$boundary"),
+                    "--$boundary\r\nContent-Disposition: form-data; name=\"action\"\r\n\r\ndirect\r\n" +
+                    "--$boundary\r\nContent-Disposition: form-data; name=\"key\"\r\n\r\n$key\r\n" +
+                    "--$boundary\r\nContent-Disposition: form-data; name=\"action_token\"\r\n\r\n\r\n" +
+                    "--$boundary--\r\n"
+                )
+
+                val postRes = app.post(
+                    url,
+                    headers = mapOf(
+                        "Content-Type" to "multipart/form-data; boundary=$boundary",
+                        "x-token" to host,
+                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+                    ),
+                    requestBody = reqBody,
+                    cookies = response.cookies
+                ).parsedSafe<Map<String, String>>()
+
+                val nextUrl = postRes?.get("url")
+                if (nextUrl != null) {
+                    val workerRes = app.get(nextUrl, headers = mapOf("User-Agent" to "Mozilla/5.0"))
+                    val workerUrlRegex = Regex("""let worker_url = '(.*?)';""")
+                    val finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
+
+                    if (finalUrl != null && finalUrl.startsWith("http")) {
+                        callback.invoke(
+                            ExtractorLink(
+                                "GDFlix",
+                                "GDFlix",
+                                finalUrl,
+                                url,
+                                Qualities.Unknown.value,
+                                true
+                            )
+                        )
                     }
                 }
-
-                for (link in validLinks) {
-                    if (link.contains("r2.dev") || link.contains("cloudflare") || link.contains("worker") || link.contains("drive") || link.contains("download")) {
-                        callback.invoke(
-                            newExtractorLink(
-                                this.name,
-                                "GDFlix Direct",
-                                link,
-                                ExtractorLinkType.VIDEO
-                            ) {
-                                this.referer = this@GDFlix.mainUrl
-                                this.quality = Qualities.Unknown.value
-                            }
-                        )
-                    } else if (link.contains("gdflix", true) && link != targetUrl) {
-                        resolve(link, depth + 1)
-                    } else if (!link.contains("gdflix")) {
+            } else {
+                // Fallback to checking links if direct post bypass fails
+                val validLinks = response.document.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
+                validLinks.forEach { link ->
+                    if (!link.contains("gdflix", true)) {
                         loadExtractor(link, subtitleCallback, callback)
                     }
                 }
-            } catch (e: Exception) {}
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        resolve(url)
     }
 }
 

@@ -212,7 +212,7 @@ class MlsbdProvider : MainAPI() {
                     try {
                         val slHtml = app.get(url, headers = ua, timeout = 60).text
                         val urlRegex = Regex("(?i)https?://[^\\s\"'<]+")
-                        val validHosts = listOf("gdflix", "hubcloud", "filepress", "minochinos", "luluvid", "dsvplay", "vimeo", "drive", "pixeldrain", "filemoon", "vidmoly", "streamwish", "streamtape", "doodstream", "gofile")
+                        val validHosts = listOf("gdflix", "hubcloud", "filepress", "minochinos", "luluvid", "dsvplay", "vimeo", "drive", "pixeldrain", "filemoon", "vidmoly", "streamwish", "streamtape", "doodstream", "gofile", "gdtot")
                         
                         // Fallback to a tags as well
                         val doc = org.jsoup.Jsoup.parse(slHtml)
