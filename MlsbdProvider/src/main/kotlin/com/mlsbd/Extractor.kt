@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 
 class GDFlix : ExtractorApi() {
     override val name = "GDFlix"
@@ -25,14 +26,15 @@ class GDFlix : ExtractorApi() {
             for (link in validLinks) {
                 if (link.contains("r2.dev") || link.contains("cloudflare") || link.contains("worker") || link.contains("drive") || link.contains("download")) {
                     callback.invoke(
-                        ExtractorLink(
+                        newExtractorLink(
                             this.name,
                             "GDFlix Direct",
                             link,
-                            this.mainUrl,
-                            Qualities.Unknown.value,
                             ExtractorLinkType.VIDEO
-                        )
+                        ) {
+                            this.referer = this@GDFlix.mainUrl
+                            this.quality = Qualities.Unknown.value
+                        }
                     )
                 } else if (!link.contains("gdflix")) {
                     loadExtractor(link, subtitleCallback, callback)
@@ -64,14 +66,15 @@ class HubCloud : ExtractorApi() {
                 for (link in validLinks) {
                     if (link.contains("hubcloud.cx") || link.contains("r2.dev") || link.contains("cloudflare") || link.contains("worker") || link.contains("drive")) {
                         callback.invoke(
-                            ExtractorLink(
+                            newExtractorLink(
                                 this.name,
                                 "HubCloud Direct",
                                 link,
-                                this.mainUrl,
-                                Qualities.Unknown.value,
                                 ExtractorLinkType.VIDEO
-                            )
+                            ) {
+                                this.referer = this@HubCloud.mainUrl
+                                this.quality = Qualities.Unknown.value
+                            }
                         )
                     } else if (!link.contains("hubcloud")) {
                         loadExtractor(link, subtitleCallback, callback)
@@ -82,14 +85,15 @@ class HubCloud : ExtractorApi() {
                 for (link in validLinks) {
                     if (link.contains("r2.dev") || link.contains("cloudflare") || link.contains("worker")) {
                         callback.invoke(
-                            ExtractorLink(
+                            newExtractorLink(
                                 this.name,
                                 "HubCloud Direct",
                                 link,
-                                this.mainUrl,
-                                Qualities.Unknown.value,
                                 ExtractorLinkType.VIDEO
-                            )
+                            ) {
+                                this.referer = this@HubCloud.mainUrl
+                                this.quality = Qualities.Unknown.value
+                            }
                         )
                     } else if (!link.contains("hubcloud")) {
                         loadExtractor(link, subtitleCallback, callback)
