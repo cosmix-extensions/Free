@@ -100,6 +100,8 @@ class GDFlix : ExtractorApi() {
             val keyRegex = Regex(""""key",\s*"(.*?)"""")
             val key = keyRegex.find(response.text)?.groupValues?.get(1)
 
+            var foundDirect = false
+
             if (key != null) {
                 val host = java.net.URI(url).host
                 
@@ -127,6 +129,7 @@ class GDFlix : ExtractorApi() {
                     val finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
 
                     if (finalUrl != null && finalUrl.startsWith("http")) {
+                        foundDirect = true
                         callback.invoke(
                             newExtractorLink(
                                 "GDFlix",
@@ -140,11 +143,38 @@ class GDFlix : ExtractorApi() {
                         )
                     }
                 }
-            } else {
-                // Fallback to checking links if direct post bypass fails
+            }
+            
+            // Fallback to checking links if direct post bypass fails or isn't found
+            if (!foundDirect) {
                 val validLinks = response.document.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
                 validLinks.forEach { link ->
-                    if (!link.contains("gdflix", true)) {
+                    if (link.contains("busycdn") || link.contains("instant") || link.contains("fastcdn")) {
+                        try {
+                            val res = app.get(link)
+                            val resUrl = res.url
+                            if (resUrl.contains("url=")) {
+                                var decoded = resUrl.substringAfter("url=")
+                                try {
+                                    decoded = java.net.URLDecoder.decode(decoded, "UTF-8")
+                                } catch (e: Exception) {}
+                                
+                                if (decoded.startsWith("http")) {
+                                    callback.invoke(
+                                        newExtractorLink(
+                                            "GDFlix",
+                                            "GDFlix Instant DL",
+                                            decoded,
+                                            ExtractorLinkType.VIDEO
+                                        ) {
+                                            this.referer = url
+                                            this.quality = Qualities.Unknown.value
+                                        }
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {}
+                    } else if (!link.contains("gdflix", true)) {
                         loadExtractor(link, subtitleCallback, callback)
                     }
                 }
