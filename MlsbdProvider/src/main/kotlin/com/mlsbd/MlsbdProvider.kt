@@ -125,7 +125,10 @@ class MlsbdProvider : MainAPI() {
                         
                         if (currentQualities.contains(quality)) {
                             if (currentLinks.isNotEmpty()) {
-                                eps.add(Episode(currentLinks.joinToString(","), "Episode $currentEpNum", season = null, episode = currentEpNum))
+                                eps.add(newEpisode(currentLinks.joinToString(",")) {
+                                    this.name = "Episode $currentEpNum"
+                                    this.episode = currentEpNum
+                                })
                                 currentEpNum++
                             }
                             currentQualities.clear()
@@ -136,7 +139,10 @@ class MlsbdProvider : MainAPI() {
                     }
                 }
                 if (currentLinks.isNotEmpty()) {
-                    eps.add(Episode(currentLinks.joinToString(","), "Episode $currentEpNum", season = null, episode = currentEpNum))
+                    eps.add(newEpisode(currentLinks.joinToString(",")) {
+                        this.name = "Episode $currentEpNum"
+                        this.episode = currentEpNum
+                    })
                 }
             }
 
