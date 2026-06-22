@@ -14,5 +14,6 @@ class MlsbdPlugin : Plugin() {
         registerExtractorAPI(Minochinos())
         registerExtractorAPI(Luluvid())
         registerExtractorAPI(Dsvplay())
+        registerExtractorAPI(FilePress())
     }
 }
