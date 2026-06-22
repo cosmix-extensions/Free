@@ -205,7 +205,8 @@ class HubCloud : ExtractorApi() {
                 val unpacked = doc.select("script").mapNotNull { it.data() }.firstOrNull { it.contains("eval(function(p,a,c,k,e,d)") }
                 if (unpacked != null) {
                     val decoded = JsUnpacker(unpacked).unpack()
-                    val jsLinks = Regex("https?://[^\"']+").findAll(decoded ?: "").map { it.value }.toList()
+                    val jsLinks = Regex("https?://[^\"']+").findAll(decoded ?: "").map { it.value }
+.toList()
                     jsLinks.forEach { link ->
                         if (link.contains("r2.dev") || link.contains("worker")) {
                             callback.invoke(newExtractorLink(name, "HubCloud [Packed]", link, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
@@ -235,5 +236,38 @@ class HubCloud : ExtractorApi() {
             } catch (e: Exception) {}
         }
         resolve(url)
+    }
+}
+
+
+class GoflixSbs : ExtractorApi() {
+    override var name = "GoflixSbs"
+    override var mainUrl = "https://goflix.sbs"
+    override val requiresReferer = false
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        try {
+            val res = app.get(url).document
+            val validLinks = res.select("a").mapNotNull { it.attr("abs:href") }
+                .filter { 
+                    it.contains("gofile") || 
+                    it.contains("1fichier") || 
+                    it.contains("megaup") || 
+                    it.contains("pixeldrain") ||
+                    it.contains("filemoon") ||
+                    it.contains("streamwish")
+                }
+            
+            validLinks.forEach { link ->
+                loadExtractor(link.replace("&amp;", "&"), subtitleCallback, callback)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
