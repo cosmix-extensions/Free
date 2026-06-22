@@ -126,9 +126,13 @@ class GDFlix : ExtractorApi() {
                 if (nextUrl != null) {
                     val workerRes = app.get(nextUrl, headers = mapOf("User-Agent" to "Mozilla/5.0"))
                     val workerUrlRegex = Regex("""let worker_url = '(.*?)';""")
-                    val finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
+                    var finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
 
                     if (finalUrl != null && finalUrl.startsWith("http")) {
+                        if (finalUrl.endsWith(".zip", true)) {
+                            finalUrl = finalUrl.removeSuffix(".zip").removeSuffix(".ZIP")
+                        }
+                        
                         foundDirect = true
                         callback.invoke(
                             newExtractorLink(
