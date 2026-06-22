@@ -2,12 +2,29 @@ package com.mlsbd
 
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.extractors.StreamWishExtractor
+import com.lagradost.cloudstream3.extractors.VidhideExtractor
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+
+class Minochinos : VidhideExtractor() {
+    override var name = "Minochinos"
+    override var mainUrl = "https://minochinos.com"
+}
+
+class Luluvid : StreamWishExtractor() {
+    override var name = "Luluvid"
+    override var mainUrl = "https://luluvid.com"
+}
+
+class Dsvplay : StreamWishExtractor() {
+    override var name = "Dsvplay"
+    override var mainUrl = "https://dsvplay.com"
+}
 
 class GDFlix : ExtractorApi() {
     override val name = "GDFlix"

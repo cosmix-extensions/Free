@@ -11,5 +11,8 @@ class MlsbdPlugin : Plugin() {
         registerMainAPI(MlsbdProvider())
         registerExtractorAPI(GDFlix())
         registerExtractorAPI(HubCloud())
+        registerExtractorAPI(Minochinos())
+        registerExtractorAPI(Luluvid())
+        registerExtractorAPI(Dsvplay())
     }
 }
