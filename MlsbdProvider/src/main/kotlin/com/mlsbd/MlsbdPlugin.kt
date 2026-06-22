@@ -9,5 +9,7 @@ class MlsbdPlugin : Plugin() {
     override fun load(context: Context) {
         // Register the provider
         registerMainAPI(MlsbdProvider())
+        registerExtractorAPI(GDFlix())
+        registerExtractorAPI(HubCloud())
     }
 }
