@@ -66,14 +66,15 @@ class FilePress : ExtractorApi() {
                 val finalUrl = res2?.get("data")?.toString()
                 if (finalUrl != null && finalUrl.startsWith("http")) {
                     callback.invoke(
-                        ExtractorLink(
+                        newExtractorLink(
                             "FilePress",
                             "FilePress",
                             finalUrl,
-                            url,
-                            Qualities.Unknown.value,
-                            true
-                        )
+                            ExtractorLinkType.VIDEO
+                        ) {
+                            this.referer = url
+                            this.quality = Qualities.Unknown.value
+                        }
                     )
                 }
             }
@@ -100,21 +101,18 @@ class GDFlix : ExtractorApi() {
             val key = keyRegex.find(response.text)?.groupValues?.get(1)
 
             if (key != null) {
-                val boundary = "----WebKitFormBoundaryi3pOrWU7hGYfwwL4"
                 val host = java.net.URI(url).host
                 
-                val reqBody = okhttp3.RequestBody.create(
-                    okhttp3.MediaType.parse("multipart/form-data; boundary=$boundary"),
-                    "--$boundary\r\nContent-Disposition: form-data; name=\"action\"\r\n\r\ndirect\r\n" +
-                    "--$boundary\r\nContent-Disposition: form-data; name=\"key\"\r\n\r\n$key\r\n" +
-                    "--$boundary\r\nContent-Disposition: form-data; name=\"action_token\"\r\n\r\n\r\n" +
-                    "--$boundary--\r\n"
-                )
+                val reqBody = okhttp3.MultipartBody.Builder()
+                    .setType(okhttp3.MultipartBody.FORM)
+                    .addFormDataPart("action", "direct")
+                    .addFormDataPart("key", key)
+                    .addFormDataPart("action_token", "")
+                    .build()
 
                 val postRes = app.post(
                     url,
                     headers = mapOf(
-                        "Content-Type" to "multipart/form-data; boundary=$boundary",
                         "x-token" to host,
                         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
                     ),
@@ -130,14 +128,15 @@ class GDFlix : ExtractorApi() {
 
                     if (finalUrl != null && finalUrl.startsWith("http")) {
                         callback.invoke(
-                            ExtractorLink(
+                            newExtractorLink(
                                 "GDFlix",
                                 "GDFlix",
                                 finalUrl,
-                                url,
-                                Qualities.Unknown.value,
-                                true
-                            )
+                                ExtractorLinkType.VIDEO
+                            ) {
+                                this.referer = url
+                                this.quality = Qualities.Unknown.value
+                            }
                         )
                     }
                 }
