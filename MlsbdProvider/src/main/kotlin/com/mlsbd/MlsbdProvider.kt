@@ -191,6 +191,16 @@ class MlsbdProvider : MainAPI() {
 
         val sortedUrls = urls.sortedBy { getQualityScore(it.substringAfterLast("|", "Unknown")) }
 
+        suspend fun invokeExtractor(targetUrl: String, referer: String?) {
+            if (targetUrl.contains("gdflix", true)) GDFlix().getUrl(targetUrl, referer, subtitleCallback, callback)
+            else if (targetUrl.contains("hubcloud", true)) HubCloud().getUrl(targetUrl, referer, subtitleCallback, callback)
+            else if (targetUrl.contains("filepress", true)) FilePress().getUrl(targetUrl, referer, subtitleCallback, callback)
+            else if (targetUrl.contains("minochinos", true)) Minochinos().getUrl(targetUrl, referer, subtitleCallback, callback)
+            else if (targetUrl.contains("luluvid", true)) Luluvid().getUrl(targetUrl, referer, subtitleCallback, callback)
+            else if (targetUrl.contains("dsvplay", true)) Dsvplay().getUrl(targetUrl, referer, subtitleCallback, callback)
+            else loadExtractor(targetUrl, subtitleCallback, callback)
+        }
+
         sortedUrls.forEach { item ->
             if (item.isBlank()) return@forEach
             val parts = item.split("|")
@@ -212,12 +222,12 @@ class MlsbdProvider : MainAPI() {
                         
                         allLinks.forEach { slUrl ->
                             if (validHosts.any { slUrl.contains(it, true) }) {
-                                loadExtractor(slUrl, subtitleCallback, callback)
+                                invokeExtractor(slUrl, url)
                             }
                         }
                     } catch (e: Exception) {}
                 } else {
-                    loadExtractor(url, subtitleCallback, callback)
+                    invokeExtractor(url, url)
                 }
             }
         }
