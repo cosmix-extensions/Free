@@ -143,6 +143,7 @@ class GDFlix : ExtractorApi() {
                             ) {
                                 this.referer = url
                                 this.quality = Qualities.Unknown.value
+                                this.headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                             }
                         )
                     }
@@ -173,9 +174,35 @@ class GDFlix : ExtractorApi() {
                                         ) {
                                             this.referer = url
                                             this.quality = Qualities.Unknown.value
+                                            this.headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                                         }
                                     )
                                 }
+                            }
+                        } catch (e: Exception) {}
+                    } else if (link.contains("zfile")) {
+                        try {
+                            val workerRes = app.get(link, headers = mapOf("User-Agent" to "Mozilla/5.0"), cookies = response.cookies)
+                            val workerUrlRegex = Regex("""let worker_url = '(.*?)';""")
+                            var finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
+
+                            if (finalUrl != null && finalUrl.startsWith("http")) {
+                                if (finalUrl.endsWith(".zip", true)) {
+                                    finalUrl = finalUrl.removeSuffix(".zip").removeSuffix(".ZIP")
+                                }
+                                
+                                callback.invoke(
+                                    newExtractorLink(
+                                        "GDFlix",
+                                        "GDFlix",
+                                        finalUrl,
+                                        ExtractorLinkType.VIDEO
+                                    ) {
+                                        this.referer = url
+                                        this.quality = Qualities.Unknown.value
+                                        this.headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                    }
+                                )
                             }
                         } catch (e: Exception) {}
                     } else if (!link.contains("gdflix", true)) {
