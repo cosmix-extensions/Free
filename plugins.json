@@ -9,7 +9,7 @@
             "Your Name"
         ],
         "description": "MLSBD Provider for Movies and TV Series",
-        "fileSize": 31667,
+        "fileSize": 31749,
         "repositoryUrl": "https://github.com/cosmix-extensions/Free",
         "language": "bn",
         "tvTypes": [
@@ -21,6 +21,6 @@
         ],
         "iconUrl": "https://mlsbd.co/wp-content/uploads/2020/09/mlsbd-icon.png",
         "apiVersion": 1,
-        "fileHash": "sha256-d96cd749f640cdb1a9f786e13234ca0cbc5288e1e15875d78ee266a935d42780"
+        "fileHash": "sha256-134c0a6b65fb382e3bdf6f9d2d78dcfd7f2b377899d9969fe971c9dc649f470d"
     }
 ]
