@@ -50,14 +50,17 @@ class FilePress : ExtractorApi() {
     ) {
         try {
             val fileId = url.trimEnd('/').split("/").last()
-            val api1 = "https://new3.filepress.live/api/file/downlaod/"
+            val host = java.net.URI(url).host
+            val apiHost = host.substringBeforeLast(".") + ".live"
+            
+            val api1 = "https://$apiHost/api/file/downlaod/"
             val res1 = app.post(api1, headers = mapOf("Referer" to url), json = mapOf("id" to fileId, "method" to "cloudR2Downlaod")).parsedSafe<Map<String, Any>>()
             
             val data1 = res1?.get("data") as? Map<String, Any> ?: res1?.get("data") as? Map<*, *>
             val downloadId = data1?.get("downloadId")?.toString()
             
             if (downloadId != null) {
-                val api2 = "https://new3.filepress.live/api/file/downlaod2/"
+                val api2 = "https://$apiHost/api/file/downlaod2/"
                 val res2 = app.post(api2, headers = mapOf("Referer" to url), json = mapOf("id" to downloadId, "method" to "cloudR2Downlaod")).parsedSafe<Map<String, Any>>()
                 
                 val finalUrl = res2?.get("data")?.toString()
