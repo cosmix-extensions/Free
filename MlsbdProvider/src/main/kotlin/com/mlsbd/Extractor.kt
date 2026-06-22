@@ -15,6 +15,16 @@ import com.lagradost.cloudstream3.utils.JsUnpacker
 class Minochinos : VidhideExtractor() {
     override var name = "Minochinos"
     override var mainUrl = "https://minochinos.com"
+    
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val embedUrl = url.replace("/file/", "/v/")
+        super.getUrl(embedUrl, referer, subtitleCallback, callback)
+    }
 }
 
 class Luluvid : StreamWishExtractor() {
