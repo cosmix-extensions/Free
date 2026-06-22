@@ -1,0 +1,26 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/cosmix-extensions/Free/builds/MlsbdProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "MlsbdProvider",
+        "internalName": "MlsbdProvider",
+        "authors": [
+            "Your Name"
+        ],
+        "description": "MLSBD Provider for Movies and TV Series",
+        "fileSize": 15092,
+        "repositoryUrl": "https://github.com/cosmix-extensions/Free",
+        "language": "bn",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "AnimeMovie",
+            "Anime",
+            "Cartoon"
+        ],
+        "iconUrl": "https://mlsbd.co/wp-content/uploads/2020/09/mlsbd-icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-61ff313cdbf4d9bd6875ddb8c6ff779da69bf37b28eaa082739950ae99c25fe0"
+    }
+]

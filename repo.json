@@ -1,0 +1,8 @@
+{
+  "name": "MLSBD Provider",
+  "description": "MLSBD - Movies and TV Series Streaming Extension",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/cosmix-extensions/Free/builds/plugins.json"
+  ]
+}
