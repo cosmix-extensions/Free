@@ -21,6 +21,4 @@ cloudstream {
     )
 
     iconUrl = "https://mlsbd.co/wp-content/uploads/2020/09/mlsbd-icon.png"
-
-    isCrossPlatform = true
 }
