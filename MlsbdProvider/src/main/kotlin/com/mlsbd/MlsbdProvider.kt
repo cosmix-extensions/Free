@@ -200,9 +200,20 @@ class MlsbdProvider : MainAPI() {
             if (url.startsWith("http")) {
                 if (url.contains("savelinks", true)) {
                     try {
-                        val slDoc = app.get(url, headers = ua, timeout = 60).document
-                        slDoc.select("a").mapNotNull { it.attr("abs:href") }.forEach { slUrl ->
-                            loadExtractor(slUrl, subtitleCallback, callback)
+                        val slHtml = app.get(url, headers = ua, timeout = 60).text
+                        val urlRegex = Regex("(?i)https?://[^\\s\"'<]+")
+                        val validHosts = listOf("gdflix", "hubcloud", "filepress", "minochinos", "luluvid", "dsvplay", "vimeo", "drive")
+                        
+                        // Fallback to a tags as well
+                        val doc = org.jsoup.Jsoup.parse(slHtml)
+                        val aLinks = doc.select("a").mapNotNull { it.attr("abs:href") }
+                        
+                        val allLinks = (urlRegex.findAll(slHtml).map { it.value }.toList() + aLinks).distinct()
+                        
+                        allLinks.forEach { slUrl ->
+                            if (validHosts.any { slUrl.contains(it, true) }) {
+                                loadExtractor(slUrl, subtitleCallback, callback)
+                            }
                         }
                     } catch (e: Exception) {}
                 } else {
