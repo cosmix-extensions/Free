@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.JsUnpacker
 
@@ -96,7 +97,8 @@ class GDFlix : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-            val response = app.get(url)
+            val interceptor = CloudflareKiller()
+            val response = app.get(url, interceptor = interceptor)
             val keyRegex = Regex(""""key",\s*"(.*?)"""")
             val key = keyRegex.find(response.text)?.groupValues?.get(1)
 
@@ -119,13 +121,14 @@ class GDFlix : ExtractorApi() {
                         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
                     ),
                     requestBody = reqBody,
-                    cookies = response.cookies
+                    cookies = response.cookies,
+                    interceptor = interceptor
                 ).parsedSafe<Map<String, String>>()
 
                 val nextUrl = postRes?.get("url")
                 if (nextUrl != null) {
-                    val workerRes = app.get(nextUrl, headers = mapOf("User-Agent" to "Mozilla/5.0"))
-                    val workerUrlRegex = Regex("""let worker_url = '(.*?)';""")
+                    val workerRes = app.get(nextUrl, headers = mapOf("User-Agent" to "Mozilla/5.0"), cookies = response.cookies, interceptor = interceptor)
+                    val workerUrlRegex = Regex("""let worker_url\s*=\s*['"](.*?)['"];""")
                     var finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
 
                     if (finalUrl != null && finalUrl.startsWith("http")) {
@@ -136,8 +139,8 @@ class GDFlix : ExtractorApi() {
                         foundDirect = true
                         callback.invoke(
                             newExtractorLink(
-                                "GDFlix",
-                                "GDFlix",
+                                "GDFlix Fast Cloud",
+                                "GDFlix Fast Cloud",
                                 finalUrl,
                                 ExtractorLinkType.VIDEO
                             ) {
