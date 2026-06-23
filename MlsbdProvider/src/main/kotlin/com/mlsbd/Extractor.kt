@@ -52,31 +52,41 @@ class FilePress : ExtractorApi() {
         try {
             val fileId = url.trimEnd('/').split("/").last()
             val host = java.net.URI(url).host
-            val apiHost = host.substringBeforeLast(".") + ".live"
+            val interceptor = CloudflareKiller()
+            val api1 = "https://$host/api/file/downlaod/"
             
-            val api1 = "https://$apiHost/api/file/downlaod/"
-            val res1 = app.post(api1, headers = mapOf("Referer" to url), json = mapOf("id" to fileId, "method" to "cloudR2Downlaod")).parsedSafe<Map<String, Any>>()
+            val methodsToTry = listOf("cloudR2Downlaod", "indexDownlaod", "cloudDownlaod", "TelegramDirectDownlaod")
             
-            val data1 = res1?.get("data") as? Map<String, Any> ?: res1?.get("data") as? Map<*, *>
-            val downloadId = data1?.get("downloadId")?.toString()
-            
-            if (downloadId != null) {
-                val api2 = "https://$apiHost/api/file/downlaod2/"
-                val res2 = app.post(api2, headers = mapOf("Referer" to url), json = mapOf("id" to downloadId, "method" to "cloudR2Downlaod")).parsedSafe<Map<String, Any>>()
-                
-                val finalUrl = res2?.get("data")?.toString()
-                if (finalUrl != null && finalUrl.startsWith("http")) {
-                    callback.invoke(
-                        newExtractorLink(
-                            "FilePress",
-                            "FilePress",
-                            finalUrl,
-                            ExtractorLinkType.VIDEO
-                        ) {
-                            this.referer = url
-                            this.quality = Qualities.Unknown.value
+            for (method in methodsToTry) {
+                try {
+                    val res1 = app.post(api1, headers = mapOf("Referer" to url), json = mapOf("id" to fileId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
+                    
+                    val data1 = res1?.get("data") as? Map<String, Any> ?: res1?.get("data") as? Map<*, *>
+                    val downloadId = data1?.get("downloadId")?.toString()
+                    
+                    if (downloadId != null) {
+                        val api2 = "https://$host/api/file/downlaod2/"
+                        val res2 = app.post(api2, headers = mapOf("Referer" to url), json = mapOf("id" to downloadId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
+                        
+                        val finalUrl = res2?.get("data")?.toString()
+                        if (finalUrl != null && finalUrl.startsWith("http")) {
+                            callback.invoke(
+                                newExtractorLink(
+                                    "FilePress",
+                                    "FilePress $method",
+                                    finalUrl,
+                                    ExtractorLinkType.VIDEO
+                                ) {
+                                    this.referer = url
+                                    this.quality = Qualities.Unknown.value
+                                }
+                            )
+                            // If we found a working link, no need to try other methods
+                            break
                         }
-                    )
+                    }
+                } catch (e: Exception) {
+                    continue
                 }
             }
         } catch (e: Exception) {
@@ -208,6 +218,8 @@ class GDFlix : ExtractorApi() {
                                 )
                             }
                         } catch (e: Exception) {}
+                    } else if (link.contains("goflix") || link.contains("gofile") || link.contains("1fichier") || link.contains("hubcloud") || link.contains("drive")) {
+                        loadExtractor(link, subtitleCallback, callback)
                     } else if (!link.contains("gdflix", true)) {
                         loadExtractor(link, subtitleCallback, callback)
                     }
@@ -286,7 +298,8 @@ class GoflixSbs : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-            val res = app.get(url).document
+            val interceptor = CloudflareKiller()
+            val res = app.get(url, interceptor = interceptor).document
             val validLinks = res.select("a").mapNotNull { it.attr("abs:href") }
                 .filter { 
                     it.contains("gofile") || 
