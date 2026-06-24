@@ -242,10 +242,11 @@ class HubCloud : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
+        val interceptor = CloudflareKiller()
         suspend fun resolve(targetUrl: String, depth: Int = 0) {
             if (depth > 2) return
             try {
-                val doc = app.get(targetUrl).document
+                val doc = app.get(targetUrl, interceptor = interceptor, headers = mapOf("Referer" to url)).document
                 val validLinks = doc.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
 
                 val unpacked = doc.select("script").mapNotNull { it.data() }.firstOrNull { it.contains("eval(function(p,a,c,k,e,d)") }
