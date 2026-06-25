@@ -107,9 +107,10 @@ class MlsbdProvider : MainAPI() {
                     
                     val isValid = href.contains("savelinks", true) || href.contains("gdflix", true) || 
                                   href.contains("hubcloud", true) || href.contains("drive", true) || 
-                                  href.contains("mega", true) || href.contains("vimeo", true) || 
-                                  aText.contains("Download in", true) || aText.contains("Watch Online", true) || 
-                                  aText.contains("Episode", true) || aText.contains("Epi", true)
+                                  href.contains("filepress", true) || href.contains("mega", true) || 
+                                  href.contains("vimeo", true) || aText.contains("Download in", true) || 
+                                  aText.contains("Watch Online", true) || aText.contains("Episode", true) || 
+                                  aText.contains("Epi", true)
                     
                     if (isValid) {
                         val linkEpMatch = Regex("(?i)(?:Epi|Ep|Episode)[- ]?(\\d+)").find(aText)
@@ -158,7 +159,7 @@ class MlsbdProvider : MainAPI() {
             val links = doc.select("a").mapNotNull { a -> 
                 val href = a.attr("abs:href")
                 val text = a.text()
-                if (href.contains("savelinks", true) || href.contains("gdflix", true) || href.contains("hubcloud", true) || href.contains("drive", true) || href.contains("mega", true) || href.contains("vimeo", true)) {
+                if (href.contains("savelinks", true) || href.contains("filepress", true) || href.contains("gdflix", true) || href.contains("hubcloud", true) || href.contains("drive", true) || href.contains("mega", true) || href.contains("vimeo", true)) {
                     var quality = "Unknown"
                     if (text.contains("720p", true)) quality = "720p"
                     else if (text.contains("1080p", true)) quality = "1080p"
@@ -194,7 +195,7 @@ class MlsbdProvider : MainAPI() {
         suspend fun invokeExtractor(targetUrl: String, referer: String?) {
             if (targetUrl.contains("gdflix", true)) GDFlix().getUrl(targetUrl, referer, subtitleCallback, callback)
             else if (targetUrl.contains("hubcloud", true)) HubCloud().getUrl(targetUrl, referer, subtitleCallback, callback)
-            else if (targetUrl.contains("filepress", true)) FilePress().getUrl(targetUrl, referer, subtitleCallback, callback)
+            else if (targetUrl.contains("filepress", true) || targetUrl.contains("filebee", true)) FilePress().getUrl(targetUrl, referer, subtitleCallback, callback)
             else if (targetUrl.contains("minochinos", true)) Minochinos().getUrl(targetUrl, referer, subtitleCallback, callback)
             else if (targetUrl.contains("luluvid", true)) Luluvid().getUrl(targetUrl, referer, subtitleCallback, callback)
             else if (targetUrl.contains("dsvplay", true)) Dsvplay().getUrl(targetUrl, referer, subtitleCallback, callback)

@@ -12,6 +12,7 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.JsUnpacker
+import kotlinx.coroutines.delay
 
 class Minochinos : VidhideExtractor() {
     override var name = "Minochinos"
@@ -53,22 +54,48 @@ class FilePress : ExtractorApi() {
             val fileId = url.trimEnd('/').split("/").last()
             val host = java.net.URI(url).host
             val interceptor = CloudflareKiller()
-            val api1 = "https://$host/api/file/downlaod/"
+            val apiGet = "https://$host/api/file/get/$fileId"
+            val apiPost = "https://$host/api/file/downlaod/"
+            val apiPost2 = "https://$host/api/file/downlaod2/"
             
-            val methodsToTry = listOf("cloudR2Downlaod", "indexDownlaod", "cloudDownlaod", "TelegramDirectDownlaod")
+            val headers = mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept" to "application/json, text/plain, */*",
+                "Origin" to "https://$host",
+                "Referer" to url
+            )
+
+            // Step 1: Initialize to get options
+            app.get(apiGet, headers = headers, interceptor = interceptor)
             
+            // Step 2: Try CloudR2Download and other methods
+            val methodsToTry = listOf("cloudR2Downlaod", "cloudDownlaod", "indexDownlaod", "TelegramDirectDownlaod", "gpDirectDownlaod", "dotFlixDownlaod")
+            
+            var extracted = false
             for (method in methodsToTry) {
+                if (extracted) break
                 try {
-                    val res1 = app.post(api1, headers = mapOf("Referer" to url), json = mapOf("id" to fileId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
+                    val initialPost = app.post(apiPost, headers = headers, json = mapOf("id" to fileId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
                     
-                    val data1 = res1?.get("data") as? Map<String, Any> ?: res1?.get("data") as? Map<*, *>
-                    val downloadId = data1?.get("downloadId")?.toString()
+                    var data1 = initialPost?.get("data") as? Map<String, Any>
+                    var status = data1?.get("status")?.toString() ?: continue
+                    var downloadId = data1?.get("downloadId")?.toString()
                     
-                    if (downloadId != null) {
-                        val api2 = "https://$host/api/file/downlaod2/"
-                        val res2 = app.post(api2, headers = mapOf("Referer" to url), json = mapOf("id" to downloadId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
-                        
+                    // Polling loop
+                    var attempts = 0
+                    while (status != "completed" && status != "failed" && attempts < 15) {
+                        delay(3000)
+                        val poll = app.post(apiPost, headers = headers, json = mapOf("id" to fileId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
+                        data1 = poll?.get("data") as? Map<String, Any>
+                        status = data1?.get("status")?.toString() ?: "failed"
+                        downloadId = data1?.get("downloadId")?.toString()
+                        attempts++
+                    }
+
+                    if (status == "completed" && downloadId != null) {
+                        val res2 = app.post(apiPost2, headers = headers, json = mapOf("id" to downloadId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
                         val finalUrl = res2?.get("data")?.toString()
+                        
                         if (finalUrl != null && finalUrl.startsWith("http")) {
                             callback.invoke(
                                 newExtractorLink(
@@ -79,10 +106,10 @@ class FilePress : ExtractorApi() {
                                 ) {
                                     this.referer = url
                                     this.quality = Qualities.Unknown.value
+                                    this.headers = headers
                                 }
                             )
-                            // If we found a working link, no need to try other methods
-                            break
+                            extracted = true
                         }
                     }
                 } catch (e: Exception) {
@@ -108,15 +135,20 @@ class GDFlix : ExtractorApi() {
     ) {
         try {
             val interceptor = CloudflareKiller()
-            val response = app.get(url, interceptor = interceptor)
+            val host = java.net.URI(url).host
+            val headers = mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer" to url
+            )
+            
+            val response = app.get(url, headers = headers, interceptor = interceptor)
             val keyRegex = Regex(""""key",\s*"(.*?)"""")
             val key = keyRegex.find(response.text)?.groupValues?.get(1)
 
             var foundDirect = false
 
+            // Try Direct Bypass first
             if (key != null) {
-                val host = java.net.URI(url).host
-                
                 val reqBody = okhttp3.MultipartBody.Builder()
                     .setType(okhttp3.MultipartBody.FORM)
                     .addFormDataPart("action", "direct")
@@ -124,52 +156,58 @@ class GDFlix : ExtractorApi() {
                     .addFormDataPart("action_token", "")
                     .build()
 
-                val postRes = app.post(
-                    url,
-                    headers = mapOf(
-                        "x-token" to host,
-                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
-                    ),
-                    requestBody = reqBody,
-                    cookies = response.cookies,
-                    interceptor = interceptor
-                ).parsedSafe<Map<String, String>>()
+                try {
+                    val postRes = app.post(
+                        url,
+                        headers = mapOf(
+                            "x-token" to host,
+                            "User-Agent" to headers["User-Agent"]!!,
+                            "Origin" to "https://$host",
+                            "Referer" to url
+                        ),
+                        requestBody = reqBody,
+                        cookies = response.cookies,
+                        interceptor = interceptor
+                    ).parsedSafe<Map<String, String>>()
 
-                val nextUrl = postRes?.get("url")
-                if (nextUrl != null) {
-                    val workerRes = app.get(nextUrl, headers = mapOf("User-Agent" to "Mozilla/5.0"), cookies = response.cookies, interceptor = interceptor)
-                    val workerUrlRegex = Regex("""let worker_url\s*=\s*['"](.*?)['"];""")
-                    var finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
+                    val nextUrl = postRes?.get("url")
+                    if (nextUrl != null) {
+                        val workerRes = app.get(nextUrl, headers = headers, cookies = response.cookies, interceptor = interceptor)
+                        val workerUrlRegex = Regex("""let worker_url\s*=\s*['"](.*?)['"];""")
+                        var finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
 
-                    if (finalUrl != null && finalUrl.startsWith("http")) {
-                        if (finalUrl.endsWith(".zip", true)) {
-                            finalUrl = finalUrl.removeSuffix(".zip").removeSuffix(".ZIP")
-                        }
-                        
-                        foundDirect = true
-                        callback.invoke(
-                            newExtractorLink(
-                                "GDFlix Fast Cloud",
-                                "GDFlix Fast Cloud",
-                                finalUrl,
-                                ExtractorLinkType.VIDEO
-                            ) {
-                                this.referer = url
-                                this.quality = Qualities.Unknown.value
-                                this.headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                        if (finalUrl != null && finalUrl.startsWith("http")) {
+                            if (finalUrl.endsWith(".zip", true)) {
+                                finalUrl = finalUrl.removeSuffix(".zip").removeSuffix(".ZIP")
                             }
-                        )
+                            
+                            foundDirect = true
+                            callback.invoke(
+                                newExtractorLink(
+                                    "GDFlix Fast Cloud",
+                                    "GDFlix Fast Cloud",
+                                    finalUrl,
+                                    ExtractorLinkType.VIDEO
+                                ) {
+                                    this.referer = url
+                                    this.quality = Qualities.Unknown.value
+                                    this.headers = headers
+                                }
+                            )
+                        }
                     }
+                } catch (e: Exception) {
+                    // Ignore exceptions during direct bypass
                 }
             }
             
-            // Fallback to checking links if direct post bypass fails or isn't found
+            // Fallback to iterating links
             if (!foundDirect) {
                 val validLinks = response.document.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
                 validLinks.forEach { link ->
                     if (link.contains("busycdn") || link.contains("instant") || link.contains("fastcdn")) {
                         try {
-                            val res = app.get(link)
+                            val res = app.get(link, headers = headers, interceptor = interceptor)
                             val resUrl = res.url
                             if (resUrl.contains("url=")) {
                                 var decoded = resUrl.substringAfter("url=")
@@ -187,7 +225,7 @@ class GDFlix : ExtractorApi() {
                                         ) {
                                             this.referer = url
                                             this.quality = Qualities.Unknown.value
-                                            this.headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                            this.headers = headers
                                         }
                                     )
                                 }
@@ -195,7 +233,7 @@ class GDFlix : ExtractorApi() {
                         } catch (e: Exception) {}
                     } else if (link.contains("zfile")) {
                         try {
-                            val workerRes = app.get(link, headers = mapOf("User-Agent" to "Mozilla/5.0"), cookies = response.cookies)
+                            val workerRes = app.get(link, headers = headers, cookies = response.cookies, interceptor = interceptor)
                             val workerUrlRegex = Regex("""let worker_url = '(.*?)';""")
                             var finalUrl = workerUrlRegex.find(workerRes.text)?.groupValues?.get(1)
 
@@ -207,18 +245,18 @@ class GDFlix : ExtractorApi() {
                                 callback.invoke(
                                     newExtractorLink(
                                         "GDFlix",
-                                        "GDFlix",
+                                        "GDFlix ZFile",
                                         finalUrl,
                                         ExtractorLinkType.VIDEO
                                     ) {
                                         this.referer = url
                                         this.quality = Qualities.Unknown.value
-                                        this.headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                        this.headers = headers
                                     }
                                 )
                             }
                         } catch (e: Exception) {}
-                    } else if (link.contains("goflix") || link.contains("gofile") || link.contains("1fichier") || link.contains("hubcloud") || link.contains("drive")) {
+                    } else if (link.contains("goflix") || link.contains("gofile") || link.contains("1fichier") || link.contains("hubcloud") || link.contains("drive") || link.contains("pixeldrain")) {
                         loadExtractor(link, subtitleCallback, callback)
                     } else if (!link.contains("gdflix", true)) {
                         loadExtractor(link, subtitleCallback, callback)
@@ -243,17 +281,18 @@ class HubCloud : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         val interceptor = CloudflareKiller()
+        val headers = mapOf("User-Agent" to "Mozilla/5.0", "Referer" to url)
+        
         suspend fun resolve(targetUrl: String, depth: Int = 0) {
             if (depth > 2) return
             try {
-                val doc = app.get(targetUrl, interceptor = interceptor, headers = mapOf("Referer" to url)).document
+                val doc = app.get(targetUrl, interceptor = interceptor, headers = headers).document
                 val validLinks = doc.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
 
                 val unpacked = doc.select("script").mapNotNull { it.data() }.firstOrNull { it.contains("eval(function(p,a,c,k,e,d)") }
                 if (unpacked != null) {
                     val decoded = JsUnpacker(unpacked).unpack()
-                    val jsLinks = Regex("https?://[^\"']+").findAll(decoded ?: "").map { it.value }
-.toList()
+                    val jsLinks = Regex("https?://[^\"']+").findAll(decoded ?: "").map { it.value }.toList()
                     jsLinks.forEach { link ->
                         if (link.contains("r2.dev") || link.contains("worker")) {
                             callback.invoke(newExtractorLink(name, "HubCloud [Packed]", link, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
@@ -285,7 +324,6 @@ class HubCloud : ExtractorApi() {
         resolve(url)
     }
 }
-
 
 class GoflixSbs : ExtractorApi() {
     override var name = "GoflixSbs"
