@@ -54,7 +54,6 @@ class FilePress : ExtractorApi() {
             val fileId = url.trimEnd('/').split("/").last()
             val host = java.net.URI(url).host
             val interceptor = CloudflareKiller()
-            val apiGet = "https://$host/api/file/get/$fileId"
             val apiPost = "https://$host/api/file/downlaod/"
             val apiPost2 = "https://$host/api/file/downlaod2/"
             
@@ -65,52 +64,66 @@ class FilePress : ExtractorApi() {
                 "Referer" to url
             )
 
-            // Step 1: Initialize to get options
-            app.get(apiGet, headers = headers, interceptor = interceptor)
-            
-            // Step 2: Try CloudR2Download and other methods
-            val methodsToTry = listOf("cloudR2Downlaod", "cloudDownlaod", "indexDownlaod", "TelegramDirectDownlaod", "gpDirectDownlaod", "dotFlixDownlaod")
+            // Try all methods
+            val methodsToTry = listOf("indexDownlaod", "dotFlixDownlaod", "telegramDownload", "TelegramDirectDownlaod", "cloudR2Downlaod", "cloudDownlaod")
             
             var extracted = false
             for (method in methodsToTry) {
                 if (extracted) break
                 try {
-                    val initialPost = app.post(apiPost, headers = headers, json = mapOf("id" to fileId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
+                    val initialPost = app.post(apiPost, headers = headers, json = mapOf("id" to fileId, "method" to method, "captchaValue" to ""), interceptor = interceptor).text
+                    val initialJson = app.mapper.readValue(initialPost, Map::class.java) as Map<String, Any?>
+                    val dataNode = initialJson["data"]
                     
-                    var data1 = initialPost?.get("data") as? Map<String, Any>
-                    var status = data1?.get("status")?.toString() ?: continue
-                    var downloadId = data1?.get("downloadId")?.toString()
-                    
-                    // Polling loop
-                    var attempts = 0
-                    while (status != "completed" && status != "failed" && attempts < 15) {
-                        delay(3000)
-                        val poll = app.post(apiPost, headers = headers, json = mapOf("id" to fileId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
-                        data1 = poll?.get("data") as? Map<String, Any>
-                        status = data1?.get("status")?.toString() ?: "failed"
-                        downloadId = data1?.get("downloadId")?.toString()
-                        attempts++
+                    var downloadId: String? = null
+                    var finalUrl: String? = null
+
+                    if (dataNode is String) {
+                        if (dataNode.startsWith("http")) {
+                            finalUrl = dataNode
+                        } else {
+                            downloadId = dataNode
+                        }
+                    } else if (dataNode is Map<*, *>) {
+                        var status = dataNode["status"]?.toString() ?: continue
+                        downloadId = dataNode["downloadId"]?.toString()
+                        
+                        var attempts = 0
+                        while (status != "completed" && status != "failed" && attempts < 15) {
+                            delay(3000)
+                            val poll = app.post(apiPost, headers = headers, json = mapOf("id" to fileId, "method" to method, "captchaValue" to ""), interceptor = interceptor).parsedSafe<Map<String, Any>>()
+                            val pollData = poll?.get("data") as? Map<String, Any>
+                            status = pollData?.get("status")?.toString() ?: "failed"
+                            downloadId = pollData?.get("downloadId")?.toString()
+                            attempts++
+                        }
                     }
 
-                    if (status == "completed" && downloadId != null) {
-                        val res2 = app.post(apiPost2, headers = headers, json = mapOf("id" to downloadId, "method" to method), interceptor = interceptor).parsedSafe<Map<String, Any>>()
-                        val finalUrl = res2?.get("data")?.toString()
-                        
-                        if (finalUrl != null && finalUrl.startsWith("http")) {
-                            callback.invoke(
-                                newExtractorLink(
-                                    "FilePress",
-                                    "FilePress $method",
-                                    finalUrl,
-                                    ExtractorLinkType.VIDEO
-                                ) {
-                                    this.referer = url
-                                    this.quality = Qualities.Unknown.value
-                                    this.headers = headers
-                                }
-                            )
-                            extracted = true
+                    if (downloadId != null && finalUrl == null) {
+                        val res2 = app.post(apiPost2, headers = headers, json = mapOf("id" to downloadId, "method" to method, "captchaValue" to ""), interceptor = interceptor).text
+                        val res2Json = app.mapper.readValue(res2, Map::class.java) as Map<String, Any?>
+                        val data2Node = res2Json["data"]
+                        if (data2Node is String) {
+                            finalUrl = data2Node
+                        } else if (data2Node is List<*>) {
+                            finalUrl = data2Node.firstOrNull()?.toString()
                         }
+                    }
+                    
+                    if (finalUrl != null && finalUrl.startsWith("http")) {
+                        callback.invoke(
+                            newExtractorLink(
+                                "FilePress",
+                                "FilePress",
+                                finalUrl,
+                                ExtractorLinkType.VIDEO
+                            ) {
+                                this.referer = url
+                                this.quality = Qualities.Unknown.value
+                                this.headers = headers
+                            }
+                        )
+                        extracted = true
                     }
                 } catch (e: Exception) {
                     continue
