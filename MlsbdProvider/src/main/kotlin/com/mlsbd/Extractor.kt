@@ -1,7 +1,7 @@
 package com.mlsbd
 
 import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.utils.WebViewResolver
+import com.lagradost.cloudstream3.network.WebViewResolver
 
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.extractors.StreamWishExtractor
@@ -119,7 +119,7 @@ class FilePress : ExtractorApi() {
             // WebViewResolver Fallback if API fails
             if (!extracted) {
                 try {
-                    val doc = app.get(url, interceptor = WebViewResolver(Regex("worker|r2\.dev|cloudflare|drive"))).document
+                    val doc = app.get(url, interceptor = WebViewResolver(Regex("worker|r2\\.dev|cloudflare|drive"))).document
                     doc.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }.forEach { link ->
                         if (link.contains("worker") || link.contains("r2.dev")) {
                             callback.invoke(newExtractorLink(name, "FilePress Web", link, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
@@ -172,7 +172,7 @@ class GDFlix : ExtractorApi() {
             // WebViewResolver Powerful Fallback
             if (!foundDirect) {
                 try {
-                    val doc = app.get(url, interceptor = WebViewResolver(Regex("worker|r2\.dev|cloudflare|drive|gofile|pixeldrain"))).document
+                    val doc = app.get(url, interceptor = WebViewResolver(Regex("worker|r2\\.dev|cloudflare|drive|gofile|pixeldrain"))).document
                     val validLinks = doc.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
                     validLinks.forEach { link ->
                         if (link.contains("worker") || link.contains("r2.dev") || link.contains("fastcdn")) {
@@ -212,7 +212,7 @@ class HubCloud : ExtractorApi() {
                 // Try WebViewResolver if Cloudflare blocks
                 var doc = app.get(targetUrl, interceptor = interceptor, headers = headers).document
                 if (doc.title().contains("Just a moment", true) || doc.title().contains("Cloudflare")) {
-                    doc = app.get(targetUrl, interceptor = WebViewResolver(Regex("r2\.dev|cloudflare|worker|drive|gofile"))).document
+                    doc = app.get(targetUrl, interceptor = WebViewResolver(Regex("r2\\.dev|cloudflare|worker|drive|gofile"))).document
                 }
 
                 val validLinks = doc.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
@@ -220,7 +220,7 @@ class HubCloud : ExtractorApi() {
                 val unpacked = doc.select("script").mapNotNull { it.data() }.firstOrNull { it.contains("eval(function(p,a,c,k,e,d)") }
                 if (unpacked != null) {
                     val decoded = JsUnpacker(unpacked).unpack()
-                    Regex("https?://[^"']+").findAll(decoded ?: "").map { it.value }.forEach { link ->
+                    Regex("""https?://[^"']+""").findAll(decoded ?: "").map { it.value }.forEach { link ->
                         if (link.contains("r2.dev") || link.contains("worker")) {
                             callback.invoke(newExtractorLink(name, "HubCloud Packed", link, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
                         }
