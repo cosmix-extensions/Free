@@ -153,11 +153,11 @@ suspend fun getLatestGDFlixUrl(fallback: String): String {
 // ─────────────────────────────────────────────
 // Helper: Helper: Follows redirect chain to get final URL
 // ─────────────────────────────────────────────
-suspend fun resolveFinalUrl(startUrl: String): String? {
+suspend fun resolveFinalUrl(startUrl: String, referer: String? = null): String? {
     var currentUrl = startUrl
     repeat(7) {
         val res = runCatching {
-            app.head(currentUrl, allowRedirects = false, timeout = 2500L)
+            app.head(currentUrl, allowRedirects = false, timeout = 2500L, referer = referer)
         }.getOrNull() ?: return null
 
         val location = res.headers["Location"] ?: res.headers["location"]
@@ -358,37 +358,9 @@ open class HubCloud : ExtractorApi() {
                     ExtractorLinkType.VIDEO
                 ) {
                     this.quality = quality
+                    this.headers = mapOf("Referer" to baseUrl)
                 }
             )
-        }
-
-        for (it in document.select("h2 a.btn")) {
-            val link = it.attr("href")
-            val text = it.text()
-
-            if (text.contains("FSL Server")) myCallback(link, "[FSL Server]")
-            else if (text.contains("FSLv2")) myCallback(link, "[FSLv2 Server]")
-            else if (text.contains("Mega Server")) myCallback(link, "[Mega Server]")
-            else if (text.contains("Download File")) myCallback(link)
-            else if (text.contains("BuzzServer")) {
-                val dlink = app.get("$link/download", referer = link, allowRedirects = false).headers["hx-redirect"] ?: ""
-                val baseUrl = getBaseUrl(link)
-                if(dlink != "") myCallback( baseUrl + dlink, "[BuzzServer]")
-            }
-            else if (link.contains("pixeldra")) {
-                val pixelLink = extractPxlUrl(document.toString()) ?: continue
-                val baseUrlLink = getBaseUrl(pixelLink)
-                val finalURL = if (pixelLink.contains("download", true)) pixelLink
-                else "$baseUrlLink/api/file/${pixelLink.substringAfterLast("/")}?download"
-                myCallback(finalURL, "[Pixeldrain]")
-            }
-            else if (text.contains("Server : 10Gbps")) {
-                var redirectUrl = resolveFinalUrl(link) ?: continue
-                if(redirectUrl.contains("link=")) redirectUrl = redirectUrl.substringAfter("link=")
-                myCallback(redirectUrl, "[Download]")
-            }
-            else if (text.contains("Gofile")) loadExtractor(link, "", subtitleCallback, callback)
-            else { println("No Server matched") }
         }
     }
 }
