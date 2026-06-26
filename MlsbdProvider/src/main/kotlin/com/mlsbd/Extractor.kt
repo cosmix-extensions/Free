@@ -222,23 +222,12 @@ open class GDFlix : ExtractorApi() {
                     name    = "$name$server $fileName [$fileSize]",
                     url     = link,
                     type    = ExtractorLinkType.VIDEO
-                ) { this.quality = quality }
+                ) { 
+                    this.quality = quality 
+                    this.headers = mapOf("Referer" to baseUrl)
+                }
             )
         }
-
-        for (anchor in document.select("div.text-center a")) {
-            val text = anchor.text().trim()
-            val link = anchor.attr("href")
-            if (link.isBlank()) continue
-
-            when {
-                text.contains("Instant DL", ignoreCase = true) -> {
-                    runCatching {
-                        val location = app.get(link, allowRedirects = false).headers["location"] ?: app.get(link, allowRedirects = false).headers["Location"].orEmpty()
-                        val videoUrl = if (location.contains("?url=")) location.substringAfter("?url=") else location
-                        if (videoUrl.isNotBlank()) emit(videoUrl, "[Instant DL]")
-                    }
-                }
                 text.contains("CLOUD DOWNLOAD", ignoreCase = true) -> {
                     val finalLink = if (link.startsWith("http")) link else "$baseUrl$link"
                     emit(finalLink, "[Cloud R2]")
