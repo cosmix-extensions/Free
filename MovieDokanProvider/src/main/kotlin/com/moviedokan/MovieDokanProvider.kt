@@ -34,7 +34,7 @@ class MovieDokanProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val titleElement = this.selectFirst("h3 a") ?: return null
+        val titleElement = this.selectFirst("h3 a, div.title a") ?: return null
         val title = titleElement.text()
         val href = titleElement.attr("href")
         val posterUrl = this.selectFirst("img")?.attr("src")
