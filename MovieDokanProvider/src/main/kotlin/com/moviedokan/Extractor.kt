@@ -86,6 +86,29 @@ class DLDokan : ExtractorApi() {
                     )
                 }
             }
+
+            runCatching {
+                val instantUrl = "https://dldokan.online/download/instant.php?token=$fileId"
+                val instantHtml = app.get(
+                    instantUrl,
+                    headers = mapOf("Referer" to url)
+                ).document.html()
+
+                val iframeSrc = Regex("""<iframe\s+src=[\"\'](https?://[^\"\']+)[\"\']""").find(instantHtml)?.groupValues?.get(1)
+                if (iframeSrc != null && !iframeSrc.contains("youtube")) {
+                    callback.invoke(
+                        ExtractorLink(
+                            source = name,
+                            name = "Instant Stream",
+                            url = iframeSrc,
+                            referer = url,
+                            quality = Qualities.Unknown.value,
+                            type = ExtractorLinkType.VIDEO,
+                            headers = emptyMap()
+                        )
+                    )
+                }
+            }
         }
 
         // 1. Generate Token (Bypass Generate Download Links button)
