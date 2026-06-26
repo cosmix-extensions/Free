@@ -17,7 +17,9 @@ class MovieDokanProvider : MainAPI() {
 
     override val mainPage = mainPageOf(
         "$mainUrl/movies/page/" to "Movies",
-        "$mainUrl/tvshows/page/" to "TV Shows"
+        "$mainUrl/tvshows/page/" to "TV Shows",
+        "$mainUrl/genre/action/page/" to "Action",
+        "$mainUrl/genre/hindi-dubbed/page/" to "Hindi Dubbed"
     )
 
     override suspend fun getMainPage(
@@ -32,8 +34,9 @@ class MovieDokanProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val title = this.selectFirst("h3.title")?.text() ?: return null
-        val href = this.selectFirst("a")?.attr("href") ?: return null
+        val titleElement = this.selectFirst("h3 a") ?: return null
+        val title = titleElement.text()
+        val href = titleElement.attr("href")
         val posterUrl = this.selectFirst("img")?.attr("src")
         val isTvSeries = href.contains("/tvshows/")
 
