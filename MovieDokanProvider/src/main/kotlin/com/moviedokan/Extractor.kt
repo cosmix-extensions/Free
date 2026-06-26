@@ -58,9 +58,24 @@ class DLDokan : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val response = app.get(url)
-        val html = response.document.html()
+        var currentUrl = url
+        var html = app.get(currentUrl).document.html()
+
+        // 1. Generate Token (Bypass Generate Download Links button)
+        runCatching {
+            val tokenUrl = if (currentUrl.contains("?")) "$currentUrl&generate_links=1" else "$currentUrl?generate_links=1"
+            val tokenRes = app.get(
+                tokenUrl,
+                headers = mapOf("X-Requested-With" to "XMLHttpRequest")
+            ).parsedSafe<DLDokanTokenResponse>()
+            
+            if (tokenRes?.success == true && tokenRes.download_url != null) {
+                currentUrl = tokenRes.download_url
+                html = app.get(currentUrl).document.html()
+            }
+        }
         
+        // 2. Extract Drive ID from the tokenized page
         val driveId = Regex("""drive_?id[\"\'\s]*[:=][\"\'\s]*([^\"\']+)""").find(html)?.groupValues?.get(1)
             ?: Regex("""id=([a-zA-Z0-9_-]{25,})""").find(html)?.groupValues?.get(1)
 
@@ -107,8 +122,9 @@ class DLDokan : ExtractorApi() {
             }
         }
         
-        // Also fallback to any normal download links they might have
-        val downloadLinks = response.document.select("a.btn, a.button, a[href*='download']").mapNotNull { it.attr("href") }
+        // 4. Also fallback to any normal download links they might have on the tokenized page
+        val document = org.jsoup.Jsoup.parse(html)
+        val downloadLinks = document.select("a.btn, a.button, a[href*='download']").mapNotNull { it.attr("href") }
         for (link in downloadLinks) {
             val fixedLink = if (link.startsWith("/")) "https://dldokan.online$link" else link
             if (fixedLink.contains("drive.google.com") || fixedLink.contains("video-downloads.googleusercontent.com")) {
@@ -141,3 +157,10 @@ class DLDokan : ExtractorApi() {
         }
     }
 }
+
+
+data class DLDokanTokenResponse(
+    @JsonProperty("success") val success: Boolean?,
+    @JsonProperty("download_url") val download_url: String?,
+    @JsonProperty("message") val message: String?
+)
