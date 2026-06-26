@@ -220,7 +220,7 @@ open class GDFlix : ExtractorApi() {
         val fileSize = document.select("ul > li.list-group-item:contains(Size)").text().substringAfter("Size : ").trim()
         val quality  = getIndexQuality(fileName)
 
-        fun emit(link: String, server: String = "") {
+        suspend fun emit(link: String, server: String = "") {
             callback.invoke(
                 newExtractorLink(
                     source  = "$name$server",
@@ -231,10 +231,10 @@ open class GDFlix : ExtractorApi() {
             )
         }
 
-        document.select("div.text-center a").forEach { anchor ->
+        for (anchor in document.select("div.text-center a")) {
             val text = anchor.text().trim()
             val link = anchor.attr("href")
-            if (link.isBlank()) return@forEach
+            if (link.isBlank()) continue
 
             when {
                 text.contains("Instant DL", ignoreCase = true) -> {
@@ -271,7 +271,10 @@ open class GDFlix : ExtractorApi() {
                 }
                 text.contains("GoFile", ignoreCase = true) -> {
                     runCatching {
-                        app.get(link).document.select(".row .row a").filter { it.attr("href").contains("gofile") }.forEach { loadExtractor(it.attr("href"), "", subtitleCallback, callback) }
+                        val gofileLinks = app.get(link).document.select(".row .row a").filter { it.attr("href").contains("gofile") }
+                        for (it in gofileLinks) {
+                            loadExtractor(it.attr("href"), "", subtitleCallback, callback)
+                        }
                     }
                 }
             }
@@ -279,8 +282,8 @@ open class GDFlix : ExtractorApi() {
 
         runCatching {
             val wfileUrl = newUrl.replace("/file/", "/wfile/")
-            cfBackupLinks(wfileUrl).forEach { source ->
-                val resolved = resolveFinalUrl(source) ?: return@forEach
+            for (source in cfBackupLinks(wfileUrl)) {
+                val resolved = resolveFinalUrl(source) ?: continue
                 emit(resolved, "[CF Backup]")
             }
         }
