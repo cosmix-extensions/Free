@@ -198,8 +198,12 @@ class MlsbdProvider : MainAPI() {
             else if (targetUrl.contains("filepress", true) || targetUrl.contains("filebee", true)) FilePress().getUrl(targetUrl, referer, subtitleCallback, callback)
             else if (targetUrl.contains("minochinos", true)) Minochinos().getUrl(targetUrl, referer, subtitleCallback, callback)
             else if (targetUrl.contains("luluvid", true)) Luluvid().getUrl(targetUrl, referer, subtitleCallback, callback)
-            else if (targetUrl.contains("dsvplay", true) || targetUrl.contains("playmogo", true)) Playmogo().getUrl(targetUrl, referer, subtitleCallback, callback)
-            else if (targetUrl.contains("morencius", true)) Morencius().getUrl(targetUrl, referer, subtitleCallback, callback)
+            else if (targetUrl.contains("dsvplay", true) || targetUrl.contains("playmogo", true)) {
+                loadExtractor(targetUrl.replace("dsvplay.com", "dood.to").replace("playmogo.com", "dood.to"), subtitleCallback, callback)
+            }
+            else if (targetUrl.contains("morencius", true)) {
+                loadExtractor(targetUrl.replace("morencius.com", "filemoon.sx"), subtitleCallback, callback)
+            }
             else loadExtractor(targetUrl, subtitleCallback, callback)
         }
 
