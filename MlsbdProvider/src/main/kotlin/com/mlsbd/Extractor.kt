@@ -238,8 +238,13 @@ open class GDFlix : ExtractorApi() {
                 text.contains("Instant DL", ignoreCase = true) -> {
                     runCatching {
                         val location = app.get(link, allowRedirects = false).headers["location"] ?: app.get(link, allowRedirects = false).headers["Location"].orEmpty()
-                        val videoUrl = if (location.contains("?url=")) location.substringAfter("?url=") else location
-                        if (videoUrl.isNotBlank()) emit(videoUrl, "[Instant DL]")
+                        var videoUrl = if (location.contains("?url=")) location.substringAfter("?url=") else location
+                        if (videoUrl.isNotBlank()) {
+                            if (!videoUrl.contains(".mkv", ignoreCase = true) && !videoUrl.contains(".mp4", ignoreCase = true)) {
+                                videoUrl = "$videoUrl#.mkv"
+                            }
+                            emit(videoUrl, "[Instant DL]")
+                        }
                     }
                 }
                 text.contains("CLOUD DOWNLOAD", ignoreCase = true) -> {
@@ -259,7 +264,10 @@ open class GDFlix : ExtractorApi() {
                         val targetUrl = if (link.startsWith("http")) link else "$baseUrl$link"
                         val doc = app.get(targetUrl).document
                         for (a in doc.select("div.card-body a")) {
-                            val dlink = a.attr("href")
+                            var dlink = a.attr("href")
+                            if (dlink.endsWith(".zip", ignoreCase = true)) {
+                                dlink = dlink.dropLast(4)
+                            }
                             val btnText = a.text().trim()
                             if (dlink.isNotBlank()) emit(dlink, "[Fast Cloud - $btnText]")
                         }
