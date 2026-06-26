@@ -445,16 +445,14 @@ class Playmogo : ExtractorApi() {
     override var name = "Playmogo"
     override var mainUrl = "https://playmogo.com"
     override val requiresReferer = false
-
-    override suspend fun getUrl(
-        url: String,
-        referer: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        val res = app.get(url, interceptor = com.lagradost.cloudstream3.network.WebViewResolver(Regex("""\.m3u8|\.mp4""")))
-        if (res.url.contains(".m3u8") || res.url.contains(".mp4")) {
-            callback.invoke(newExtractorLink(name, name, res.url, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
+    override suspend fun getUrl(url: String, referer: String?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit) {
+        val doc = app.get(url).document
+        val unpacked = doc.select("script").mapNotNull { it.data() }.firstOrNull { it.contains("eval(function(p,a,c,k,e,") }
+        if (unpacked != null) {
+            val decoded = com.lagradost.cloudstream3.utils.JsUnpacker(unpacked).unpack()
+            Regex("""https?://[^"']+(?:mp4|m3u8)[^"']*""").findAll(decoded ?: "").map { it.value }.forEach { link ->
+                callback.invoke(newExtractorLink(name, name, link, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
+            }
         }
     }
 }
@@ -463,16 +461,14 @@ class Morencius : ExtractorApi() {
     override var name = "Morencius"
     override var mainUrl = "https://morencius.com"
     override val requiresReferer = false
-
-    override suspend fun getUrl(
-        url: String,
-        referer: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        val res = app.get(url, interceptor = com.lagradost.cloudstream3.network.WebViewResolver(Regex("""\.m3u8|\.mp4""")))
-        if (res.url.contains(".m3u8") || res.url.contains(".mp4")) {
-            callback.invoke(newExtractorLink(name, name, res.url, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
+    override suspend fun getUrl(url: String, referer: String?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit) {
+        val doc = app.get(url).document
+        val unpacked = doc.select("script").mapNotNull { it.data() }.firstOrNull { it.contains("eval(function(p,a,c,k,e,") }
+        if (unpacked != null) {
+            val decoded = com.lagradost.cloudstream3.utils.JsUnpacker(unpacked).unpack()
+            Regex("""https?://[^"']+(?:mp4|m3u8)[^"']*""").findAll(decoded ?: "").map { it.value }.forEach { link ->
+                callback.invoke(newExtractorLink(name, name, link, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
+            }
         }
     }
 }
