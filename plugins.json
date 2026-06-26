@@ -22,5 +22,29 @@
         "iconUrl": "https://mlsbd.co/wp-content/uploads/2020/09/mlsbd-icon.png",
         "apiVersion": 1,
         "fileHash": "sha256-e09bc2728684ac68e709a1a8121deba837fc3a94518e3c4ec0d5019496c35f50"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/cosmix-extensions/Free/builds/MovieDokanProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "MovieDokanProvider",
+        "internalName": "MovieDokanProvider",
+        "authors": [
+            "Your Name"
+        ],
+        "description": "MovieDokan Provider for Movies and TV Series",
+        "fileSize": 15133,
+        "repositoryUrl": "https://github.com/cosmix-extensions/Free",
+        "language": "bn",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "AnimeMovie",
+            "Anime",
+            "Cartoon"
+        ],
+        "iconUrl": "https://moviedokan.co/wp-content/uploads/2025/12/cropped-Logo-1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-077ac5815801d2089e62ad8ddd7da12558dde80c36dae5b45a30e6cee5cc2710"
     }
 ]
