@@ -20,5 +20,5 @@ cloudstream {
         "Cartoon"
     )
 
-    iconUrl = "https://moviedokan.co/wp-content/uploads/2024/02/favicon-150x150.png"
+    iconUrl = "https://moviedokan.co/wp-content/uploads/2025/12/cropped-Logo-1.png"
 }
