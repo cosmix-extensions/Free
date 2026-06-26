@@ -26,17 +26,22 @@ class LinkShield : ExtractorApi() {
     ) {
         val response = app.get(url, allowRedirects = true)
         val doc = response.document
-        // Depending on linkshield, we might need to click a button or just get the iframe.
-        // We will leave this as a basic pass-through for now. If it requires a POST, we handle it here.
-        // For now, if the redirect automatically goes to dldokan, we just pass it to loadExtractor.
         val targetUrl = response.url
+        
         if (targetUrl.contains("dldokan", true)) {
             com.lagradost.cloudstream3.utils.loadExtractor(targetUrl, subtitleCallback, callback)
         } else {
-            // Further bypass logic if needed. Sometimes it's inside an href or window.location.
-            val iframe = doc.selectFirst("iframe")?.attr("src")
-            if (iframe != null) {
-                com.lagradost.cloudstream3.utils.loadExtractor(if (iframe.startsWith("//")) "https:$iframe" else iframe, subtitleCallback, callback)
+            val html = doc.html()
+            val dldokanLink = doc.selectFirst("a[href*='dldokan']")?.attr("href")
+                ?: Regex("""https?://[^\s\"\'<>]*dldokan[^\s\"\'<>]*""").find(html)?.value
+
+            if (dldokanLink != null) {
+                com.lagradost.cloudstream3.utils.loadExtractor(dldokanLink, subtitleCallback, callback)
+            } else {
+                val iframe = doc.selectFirst("iframe")?.attr("src")
+                if (iframe != null) {
+                    com.lagradost.cloudstream3.utils.loadExtractor(if (iframe.startsWith("//")) "https:$iframe" else iframe, subtitleCallback, callback)
+                }
             }
         }
     }
@@ -44,51 +49,94 @@ class LinkShield : ExtractorApi() {
 
 class DLDokan : ExtractorApi() {
     override var name = "DLDokan"
-    override var mainUrl = "https://dldokan.online"
+    override var mainUrl = "https://dldokan"
     override val requiresReferer = false
 
-    // DLDokan uses the exact same script as GDFlix
     override suspend fun getUrl(
         url: String,
         referer: String?,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val doc = app.get(url).document
-        val downloadLinks = doc.select("a.btn, a.button, a[href*='download']").mapNotNull { it.attr("href") }
+        val response = app.get(url)
+        val html = response.document.html()
         
+        val driveId = Regex("""drive_?id[\"\'\s]*[:=][\"\'\s]*([^\"\']+)""").find(html)?.groupValues?.get(1)
+            ?: Regex("""id=([a-zA-Z0-9_-]{25,})""").find(html)?.groupValues?.get(1)
+
+        if (driveId != null) {
+            // 1. Native GDrive Bypass (Best Quality)
+            com.lagradost.cloudstream3.utils.loadExtractor("https://drive.google.com/file/d/$driveId/view", subtitleCallback, callback)
+
+            // 2. Extract Worker Links
+            val workersStr = Regex("""WORKER_LINKS\s*=\s*\[(.*?)\]""").find(html)?.groupValues?.get(1)
+            if (!workersStr.isNullOrBlank()) {
+                val workers = Regex("""['"]([^'"]+)['"]""").findAll(workersStr).map { it.groupValues[1] }.toList()
+                workers.forEach { worker ->
+                    callback.invoke(
+                        ExtractorLink(
+                            source = name,
+                            name = "Fast Cloud Worker",
+                            url = "$worker/direct.aspx?id=$driveId",
+                            referer = "",
+                            quality = Qualities.Unknown.value,
+                            type = ExtractorLinkType.VIDEO,
+                            headers = emptyMap()
+                        )
+                    )
+                }
+            }
+
+            // 3. Extract Filepress Links
+            val filepressStr = Regex("""FILEPRESS_LINKS\s*=\s*\[(.*?)\]""").find(html)?.groupValues?.get(1)
+            if (!filepressStr.isNullOrBlank()) {
+                val filepress = Regex("""['"]([^'"]+)['"]""").findAll(filepressStr).map { it.groupValues[1] }.toList()
+                filepress.forEach { fp ->
+                    callback.invoke(
+                        ExtractorLink(
+                            source = name,
+                            name = "Filepress",
+                            url = "$fp?id=$driveId",
+                            referer = "",
+                            quality = Qualities.Unknown.value,
+                            type = ExtractorLinkType.VIDEO,
+                            headers = emptyMap()
+                        )
+                    )
+                }
+            }
+        }
+        
+        // Also fallback to any normal download links they might have
+        val downloadLinks = response.document.select("a.btn, a.button, a[href*='download']").mapNotNull { it.attr("href") }
         for (link in downloadLinks) {
-            val fixedLink = if (link.startsWith("/")) "$mainUrl$link" else link
+            val fixedLink = if (link.startsWith("/")) "https://dldokan.online$link" else link
             if (fixedLink.contains("drive.google.com") || fixedLink.contains("video-downloads.googleusercontent.com")) {
-                // Instant Download logic
                 callback.invoke(
                     ExtractorLink(
                         source = name,
                         name = "Instant DL",
-                        url = "$fixedLink#.mkv", // Force ExoPlayer to treat as video
-                        referer = "", // Important: empty referer bypasses Google Drive block!
+                        url = "$fixedLink#.mkv",
+                        referer = "",
                         quality = Qualities.Unknown.value,
                         type = ExtractorLinkType.VIDEO,
-                        headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+                        headers = mapOf("User-Agent" to "Mozilla/5.0")
                     )
                 )
             } else if (fixedLink.contains("hubcloud") || fixedLink.contains("gdtot")) {
                 com.lagradost.cloudstream3.utils.loadExtractor(fixedLink, subtitleCallback, callback)
             } else if (fixedLink.contains(".zip", true)) {
-                // Fast Cloud logic
                 val unwrapped = fixedLink.replace(".zip", "", true)
                 callback.invoke(
                     ExtractorLink(
                         source = name,
                         name = "Fast Cloud",
                         url = unwrapped,
-                        referer = mainUrl,
+                        referer = "https://dldokan.online",
                         quality = Qualities.Unknown.value,
                         type = ExtractorLinkType.VIDEO
                     )
                 )
-            } else {
-                com.lagradost.cloudstream3.utils.loadExtractor(fixedLink, subtitleCallback, callback)
             }
         }
     }
