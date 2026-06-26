@@ -243,7 +243,20 @@ open class GDFlix : ExtractorApi() {
                             if (!videoUrl.contains(".mkv", ignoreCase = true) && !videoUrl.contains(".mp4", ignoreCase = true)) {
                                 videoUrl = "$videoUrl#.mkv"
                             }
-                            emit(videoUrl, "[Instant DL]")
+                            callback.invoke(
+                                newExtractorLink(
+                                    source  = "$name",
+                                    name    = "$name $fileName [$fileSize] [Instant DL]",
+                                    url     = videoUrl,
+                                    type    = ExtractorLinkType.VIDEO
+                                ) { 
+                                    this.quality = quality
+                                    this.headers = mapOf(
+                                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+                                        "Referer" to ""
+                                    )
+                                }
+                            )
                         }
                     }
                 }
