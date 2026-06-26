@@ -310,7 +310,7 @@ open class HubCloud : ExtractorApi() {
 
     fun extractDoubleAtob(html: String): String? {
         val regex = Regex("""var\s+url\s*=\s*atob\s*\(\s*atob\s*\(\s*['"]([^'"]+)['"]\s*\)\s*\)""")
-        return regex.find(html)?.groupValues?.get(1)?.let { base64Decode(base64Decode(it)) }
+        return regex.find(html)?.groupValues?.get(1)?.let { String(android.util.Base64.decode(String(android.util.Base64.decode(it, android.util.Base64.DEFAULT)), android.util.Base64.DEFAULT)) }
     }
 
     override suspend fun getUrl(
@@ -322,9 +322,9 @@ open class HubCloud : ExtractorApi() {
         var baseUrl = getBaseUrl(url)
 
         val latestBaseUrl = if(url.contains("hubcloud")) {
-            getLatestBaseUrl(baseUrl, "hubcloud")
+            baseUrl
         } else {
-            getLatestBaseUrl(baseUrl, "vcloud")
+            baseUrl
         }
 
         var newUrl = url
@@ -356,7 +356,7 @@ open class HubCloud : ExtractorApi() {
         val size = document.select("i#size").text()
         val quality = getIndexQuality(header)
 
-        suspend suspend fun myCallback( link: String, server: String = "") {
+        suspend fun myCallback( link: String, server: String = "") {
             callback.invoke(
                 newExtractorLink(
                     "${name}${server}",
@@ -395,7 +395,7 @@ open class HubCloud : ExtractorApi() {
                 myCallback(redirectUrl, "[Download]")
             }
             else if (text.contains("Gofile")) loadExtractor(link, "", subtitleCallback, callback)
-            else { Log.d("Error", "No Server matched") }
+            else { println("No Server matched") }
         }
     }
 }
