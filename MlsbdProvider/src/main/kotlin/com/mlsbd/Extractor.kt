@@ -254,8 +254,12 @@ open class GDFlix : ExtractorApi() {
                 text.contains("FAST CLOUD", ignoreCase = true) -> {
                     runCatching {
                         val targetUrl = if (link.startsWith("http")) link else "$baseUrl$link"
-                        val dlink = app.get(targetUrl).document.select("div.card-body a").attr("href")
-                        if (dlink.isNotBlank()) emit(dlink, "[Fast Cloud]")
+                        val doc = app.get(targetUrl).document
+                        for (a in doc.select("div.card-body a")) {
+                            val dlink = a.attr("href")
+                            val btnText = a.text().trim()
+                            if (dlink.isNotBlank()) emit(dlink, "[Fast Cloud - $btnText]")
+                        }
                     }
                 }
                 link.contains("pixeldra", ignoreCase = true) -> {
