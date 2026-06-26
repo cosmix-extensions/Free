@@ -89,12 +89,11 @@ class MovieDokanProvider : MainAPI() {
                 }
                 
                 episodes.add(
-                    Episode(
-                        data = link,
-                        name = epName,
-                        season = 1,
-                        episode = index + 1
-                    )
+                    newEpisode(link) {
+                        this.name = epName
+                        this.season = 1
+                        this.episode = index + 1
+                    }
                 )
             }
             
