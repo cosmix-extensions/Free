@@ -131,10 +131,75 @@ class FilePress : ExtractorApi() {
     }
 }
 
-class GDFlix : ExtractorApi() {
-    override var name = "GDFlix"
-    override var mainUrl = "https://gdflix.dev"
+
+// ─────────────────────────────────────────────
+// Helper: URL থেকে base (scheme + host) বের করে
+// ─────────────────────────────────────────────
+fun getBaseUrl(url: String): String {
+    return try {
+        java.net.URI(url).let { "${it.scheme}://${it.host}" }
+    } catch (e: Exception) {
+        url
+    }
+}
+
+// ─────────────────────────────────────────────
+// Helper: GitHub JSON থেকে latest GDFlix domain নেয়
+// ─────────────────────────────────────────────
+suspend fun getLatestGDFlixUrl(fallback: String): String {
+    return try {
+        val json = app.get("https://raw.githubusercontent.com/SaurabhKaperwan/Utils/refs/heads/main/urls.json").parsedSafe<Map<String, String>>()
+        json?.get("gdflix")?.takeIf { it.isNotBlank() } ?: fallback
+    } catch (e: Exception) {
+        fallback
+    }
+}
+
+// ─────────────────────────────────────────────
+// Helper: redirect chain follow করে final URL দেয়
+// ─────────────────────────────────────────────
+suspend fun resolveFinalUrl(startUrl: String): String? {
+    var currentUrl = startUrl
+    repeat(7) {
+        val res = runCatching {
+            app.head(currentUrl, allowRedirects = false, timeout = 2500L)
+        }.getOrNull() ?: return null
+
+        val location = res.headers["Location"] ?: res.headers["location"]
+        if (location.isNullOrEmpty()) return currentUrl
+        currentUrl = location
+    }
+    return currentUrl
+}
+
+// ─────────────────────────────────────────────
+// Helper: filename থেকে quality (480/720/1080) বের করে
+// ─────────────────────────────────────────────
+fun getIndexQuality(str: String?): Int {
+    if (str.isNullOrBlank()) return Qualities.Unknown.value
+    Regex("""(\d{3,4})[pP]""").find(str)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+    return when {
+        str.lowercase().contains("4k") -> 2160
+        str.lowercase().contains("2k") -> 1440
+        else -> Qualities.Unknown.value
+    }
+}
+
+open class GDFlix : ExtractorApi() {
+    override val name            = "GDFlix"
+    override val mainUrl         = "https://gdflix.*"
     override val requiresReferer = false
+
+    private suspend fun cfBackupLinks(url: String): List<String> {
+        val results = mutableListOf<String>()
+        listOf("1", "2").forEach { t ->
+            runCatching {
+                val doc = app.get("$url?type=$t").document
+                doc.select("a.btn-success").mapNotNullTo(results) { it.attr("href").takeIf { h -> h.isNotBlank() } }
+            }
+        }
+        return results
+    }
 
     override suspend fun getUrl(
         url: String,
@@ -142,54 +207,97 @@ class GDFlix : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        try {
-            val interceptor = CloudflareKiller()
-            val host = java.net.URI(url).host
-            val headers = mapOf("User-Agent" to "Mozilla/5.0", "Referer" to url)
-            
-            var foundDirect = false
-            
-            // Native Direct Bypass attempt
-            try {
-                val response = app.get(url, headers = headers, interceptor = interceptor)
-                val key = Regex(""""key",\s*"(.*?)"""").find(response.text)?.groupValues?.get(1)
-                if (key != null) {
-                    val reqBody = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM).addFormDataPart("action", "direct").addFormDataPart("key", key).addFormDataPart("action_token", "").build()
-                    val postRes = app.post(url, headers = mapOf("x-token" to host, "Origin" to "https://$host"), requestBody = reqBody, cookies = response.cookies, interceptor = interceptor).parsedSafe<Map<String, String>>()
-                    val nextUrl = postRes?.get("url")
-                    if (nextUrl != null) {
-                        val workerRes = app.get(nextUrl, headers = headers, cookies = response.cookies, interceptor = interceptor)
-                        var finalUrl = Regex("""let worker_url\s*=\s*['"](.*?)['"];""").find(workerRes.text)?.groupValues?.get(1)
-                        if (finalUrl != null) {
-                            if (finalUrl.endsWith(".zip", true)) finalUrl = finalUrl.removeSuffix(".zip").removeSuffix(".ZIP")
-                            callback.invoke(newExtractorLink("GDFlix", "GDFlix Direct", finalUrl, ExtractorLinkType.VIDEO) { this.quality = Qualities.Unknown.value })
-                            foundDirect = true
-                        }
+        var baseUrl   = getBaseUrl(url)
+        val latestBase = getLatestGDFlixUrl(baseUrl)
+        val newUrl     = if (baseUrl != latestBase) {
+            baseUrl = latestBase
+            url.replace(getBaseUrl(url), latestBase)
+        } else url
+
+        val document = app.get(newUrl).document
+
+        val fileName = document.select("ul > li.list-group-item:contains(Name)").text().substringAfter("Name : ").trim()
+        val fileSize = document.select("ul > li.list-group-item:contains(Size)").text().substringAfter("Size : ").trim()
+        val quality  = getIndexQuality(fileName)
+
+        fun emit(link: String, server: String = "") {
+            callback.invoke(
+                newExtractorLink(
+                    source  = "$name$server",
+                    name    = "$name$server $fileName [$fileSize]",
+                    url     = link,
+                    type    = ExtractorLinkType.VIDEO
+                ) { this.quality = quality }
+            )
+        }
+
+        document.select("div.text-center a").forEach { anchor ->
+            val text = anchor.text().trim()
+            val link = anchor.attr("href")
+            if (link.isBlank()) return@forEach
+
+            when {
+                text.contains("Instant DL", ignoreCase = true) -> {
+                    runCatching {
+                        val location = app.get(link, allowRedirects = false).headers["location"] ?: app.get(link, allowRedirects = false).headers["Location"].orEmpty()
+                        val videoUrl = if (location.contains("?url=")) location.substringAfter("?url=") else location
+                        if (videoUrl.isNotBlank()) emit(videoUrl, "[Instant DL]")
                     }
                 }
-            } catch (e: Exception) {}
-
-            // WebViewResolver Powerful Fallback
-            if (!foundDirect) {
-                try {
-                    val doc = app.get(url, interceptor = WebViewResolver(Regex("worker|r2\\.dev|cloudflare|drive|gofile|pixeldrain"))).document
-                    val validLinks = doc.select("a").mapNotNull { it.attr("abs:href") }.filter { it.startsWith("http") }
-                    validLinks.forEach { link ->
-                        if (link.contains("worker") || link.contains("r2.dev") || link.contains("fastcdn")) {
-                            var decoded = link
-                            if (link.contains("url=")) {
-                                try { decoded = java.net.URLDecoder.decode(link.substringAfter("url="), "UTF-8") } catch (e: Exception) {}
-                            }
-                            if (decoded.endsWith(".zip", true)) decoded = decoded.removeSuffix(".zip").removeSuffix(".ZIP")
-                            callback.invoke(newExtractorLink("GDFlix", "GDFlix Web", decoded, ExtractorLinkType.VIDEO) { quality = Qualities.Unknown.value })
-                        } else if (!link.contains("gdflix", true)) {
-                            loadExtractor(link, subtitleCallback, callback)
-                        }
+                text.contains("CLOUD DOWNLOAD", ignoreCase = true) -> {
+                    val finalLink = if (link.startsWith("http")) link else "$baseUrl$link"
+                    emit(finalLink, "[Cloud R2]")
+                }
+                text.contains("DIRECT", ignoreCase = true) -> {
+                    val finalLink = if (link.startsWith("http")) link else "$baseUrl$link"
+                    emit(finalLink, "[Direct]")
+                }
+                text.contains("FSL", ignoreCase = true) -> {
+                    val finalLink = if (link.startsWith("http")) link else "$baseUrl$link"
+                    emit(finalLink, "[FSL]")
+                }
+                text.contains("FAST CLOUD", ignoreCase = true) -> {
+                    runCatching {
+                        val targetUrl = if (link.startsWith("http")) link else "$baseUrl$link"
+                        val dlink = app.get(targetUrl).document.select("div.card-body a").attr("href")
+                        if (dlink.isNotBlank()) emit(dlink, "[Fast Cloud]")
                     }
-                } catch (e: Exception) { e.printStackTrace() }
+                }
+                link.contains("pixeldra", ignoreCase = true) -> {
+                    val pid      = link.substringAfterLast("/")
+                    val dlBase   = getBaseUrl(link)
+                    val finalURL = if (link.contains("download", ignoreCase = true)) link else "$dlBase/api/file/$pid?download"
+                    emit(finalURL, "[Pixeldrain]")
+                }
+                text.contains("GoFile", ignoreCase = true) -> {
+                    runCatching {
+                        app.get(link).document.select(".row .row a").filter { it.attr("href").contains("gofile") }.forEach { loadExtractor(it.attr("href"), "", subtitleCallback, callback) }
+                    }
+                }
             }
-        } catch (e: Exception) { e.printStackTrace() }
+        }
+
+        runCatching {
+            val wfileUrl = newUrl.replace("/file/", "/wfile/")
+            cfBackupLinks(wfileUrl).forEach { source ->
+                val resolved = resolveFinalUrl(source) ?: return@forEach
+                emit(resolved, "[CF Backup]")
+            }
+        }
     }
+}
+
+class GDFlixApp : GDFlix() {
+    override var mainUrl = "https://app.gdflix.*"
+}
+
+class GDFlixNet : GDFlix() {
+    override var mainUrl = "https://gdflix.net"
+}
+
+class GDLink : GDFlix() {
+    override val name    = "GDLink"
+    override var mainUrl = "https://gdlink.*"
 }
 
 class HubCloud : ExtractorApi() {
@@ -304,9 +412,10 @@ class Morencius : ExtractorApi() {
                             name,
                             name,
                             link,
-                            ExtractorLinkType.VIDEO,
-                            Qualities.Unknown.value
-                        )
+                            ExtractorLinkType.VIDEO
+                        ) {
+                            this.quality = Qualities.Unknown.value
+                        }
                     )
                 }
             }
