@@ -33,7 +33,7 @@
             "Your Name"
         ],
         "description": "MovieDokan Provider for Movies and TV Series",
-        "fileSize": 17290,
+        "fileSize": 20360,
         "repositoryUrl": "https://github.com/cosmix-extensions/Free",
         "language": "bn",
         "tvTypes": [
@@ -45,6 +45,6 @@
         ],
         "iconUrl": "https://moviedokan.co/wp-content/uploads/2025/12/cropped-Logo-1.png",
         "apiVersion": 1,
-        "fileHash": "sha256-29591dbb0a075e4da35b008263ccf4ad3f22c111d85e6142d27b8fee013f73b2"
+        "fileHash": "sha256-d0133e6d2eebc409a1079b530f0636f96fda3c921228726f887556200643145a"
     }
 ]
