@@ -32,10 +32,8 @@ jobs:
       - name: Build and Generate
         run: |
           ./gradlew MlsbdProvider:make
-          ./gradlew MovieDokanProvider:make
           ./gradlew makePluginsJson
           cp MlsbdProvider/build/MlsbdProvider.cs3 build/
-          cp MovieDokanProvider/build/MovieDokanProvider.cs3 build/
           echo '{
             "name": "MLSBD Provider",
             "description": "MLSBD - Movies and TV Series Streaming Extension",
