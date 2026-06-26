@@ -3,7 +3,7 @@ version = 1
 cloudstream {
     language = "bn"
     authors = listOf("Your Name")
-    description = "MLSBD Provider for Movies and TV Series"
+    description = "MovieDokan Provider for Movies and TV Series"
     /**
      * Status int as the following:
      * 0: Down
@@ -20,5 +20,5 @@ cloudstream {
         "Cartoon"
     )
 
-    iconUrl = "https://mlsbd.co/wp-content/uploads/2020/09/mlsbd-icon.png"
+    iconUrl = "https://moviedokan.co/wp-content/uploads/2024/02/favicon-150x150.png"
 }
