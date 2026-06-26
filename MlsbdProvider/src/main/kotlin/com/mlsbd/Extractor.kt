@@ -147,12 +147,7 @@ fun getBaseUrl(url: String): String {
 // Helper: Helper: Fetches latest GDFlix domain from GitHub JSON
 // ─────────────────────────────────────────────
 suspend fun getLatestGDFlixUrl(fallback: String): String {
-    return try {
-        val json = app.get("https://raw.githubusercontent.com/SaurabhKaperwan/Utils/refs/heads/main/urls.json").parsedSafe<Map<String, String>>()
-        json?.get("gdflix")?.takeIf { it.isNotBlank() } ?: fallback
-    } catch (e: Exception) {
-        fallback
-    }
+    return fallback
 }
 
 // ─────────────────────────────────────────────
