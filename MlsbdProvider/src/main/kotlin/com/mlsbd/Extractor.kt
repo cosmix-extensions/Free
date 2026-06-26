@@ -275,3 +275,43 @@ class GoflixSbs : ExtractorApi() {
         }
     }
 }
+
+
+class Playmogo : StreamWishExtractor() {
+    override var name = "Playmogo"
+    override var mainUrl = "https://playmogo.com"
+}
+
+class Morencius : ExtractorApi() {
+    override var name = "Morencius"
+    override var mainUrl = "https://morencius.com"
+    override val requiresReferer = false
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        try {
+            val doc = app.get(url).document
+            val unpacked = doc.select("script").mapNotNull { it.data() }.firstOrNull { it.contains("eval(function(p,a,c,k,e,d)") }
+            if (unpacked != null) {
+                val decoded = JsUnpacker(unpacked).unpack()
+                Regex("""https?://[^"']+(?:mp4|m3u8)[^"']*""").findAll(decoded ?: "").map { it.value }.forEach { link ->
+                    callback.invoke(
+                        newExtractorLink(
+                            name,
+                            name,
+                            link,
+                            ExtractorLinkType.VIDEO,
+                            Qualities.Unknown.value
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
