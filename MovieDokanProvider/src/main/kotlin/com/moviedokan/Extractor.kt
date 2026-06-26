@@ -61,6 +61,33 @@ class DLDokan : ExtractorApi() {
         var currentUrl = url
         var html = app.get(currentUrl).document.html()
 
+        // 0. Extract File ID from the URL and attempt to get the direct video from player.php
+        val fileId = Regex("""/file/([a-zA-Z0-9_-]+)""").find(url)?.groupValues?.get(1)
+        if (fileId != null) {
+            runCatching {
+                val playerUrl = "https://dldokan.online/download/player.php?token=$fileId"
+                val playerHtml = app.get(
+                    playerUrl,
+                    headers = mapOf("Referer" to url)
+                ).document.html()
+
+                val videoUrl = Regex("""videoURL\s*=\s*[\"\'](https?://[^\"\']+)[\"\']""").find(playerHtml)?.groupValues?.get(1)
+                if (videoUrl != null) {
+                    callback.invoke(
+                        ExtractorLink(
+                            source = name,
+                            name = "Direct Stream",
+                            url = videoUrl,
+                            referer = url,
+                            quality = Qualities.Unknown.value,
+                            type = ExtractorLinkType.VIDEO,
+                            headers = emptyMap()
+                        )
+                    )
+                }
+            }
+        }
+
         // 1. Generate Token (Bypass Generate Download Links button)
         runCatching {
             val tokenUrl = if (currentUrl.contains("?")) "$currentUrl&generate_links=1" else "$currentUrl?generate_links=1"
