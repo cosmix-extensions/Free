@@ -133,7 +133,7 @@ class FilePress : ExtractorApi() {
 
 
 // ─────────────────────────────────────────────
-// Helper: URL থেকে base (scheme + host) বের করে
+// Helper: Helper: Extracts base URL (scheme + host)
 // ─────────────────────────────────────────────
 fun getBaseUrl(url: String): String {
     return try {
@@ -144,7 +144,7 @@ fun getBaseUrl(url: String): String {
 }
 
 // ─────────────────────────────────────────────
-// Helper: GitHub JSON থেকে latest GDFlix domain নেয়
+// Helper: Helper: Fetches latest GDFlix domain from GitHub JSON
 // ─────────────────────────────────────────────
 suspend fun getLatestGDFlixUrl(fallback: String): String {
     return try {
@@ -156,7 +156,7 @@ suspend fun getLatestGDFlixUrl(fallback: String): String {
 }
 
 // ─────────────────────────────────────────────
-// Helper: redirect chain follow করে final URL দেয়
+// Helper: Helper: Follows redirect chain to get final URL
 // ─────────────────────────────────────────────
 suspend fun resolveFinalUrl(startUrl: String): String? {
     var currentUrl = startUrl
@@ -173,7 +173,7 @@ suspend fun resolveFinalUrl(startUrl: String): String? {
 }
 
 // ─────────────────────────────────────────────
-// Helper: filename থেকে quality (480/720/1080) বের করে
+// Helper: Helper: Extracts quality from filename
 // ─────────────────────────────────────────────
 fun getIndexQuality(str: String?): Int {
     if (str.isNullOrBlank()) return Qualities.Unknown.value
