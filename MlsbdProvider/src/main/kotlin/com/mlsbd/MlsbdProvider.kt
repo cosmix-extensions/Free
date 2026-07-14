@@ -7,7 +7,7 @@ import org.jsoup.nodes.Element
 class MlsbdProvider : MainAPI() {
     override var mainUrl = "https://mlsbd.co"
     override var name = "MLSBD"
-    override var lang = "en"
+    override var lang = "hi"
     override val hasMainPage = true
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Movie, TvType.Anime)
 
