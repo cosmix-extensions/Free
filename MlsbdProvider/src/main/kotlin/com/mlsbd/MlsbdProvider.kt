@@ -13,16 +13,15 @@ class MlsbdProvider : MainAPI() {
 
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    // A foolproof method to clean the title without using complex Regex
-    // This perfectly prevents old Cloudstream apps from crashing.
+    // Modern and smart Kotlin approach using Regex to find (YYYY)
     private fun cleanTitle(rawTitle: String): String {
-        for (year in 1950..2050) {
-            val yearStr = "($year)"
-            if (rawTitle.contains(yearStr)) {
-                return rawTitle.substringBefore(yearStr).trim()
-            }
+        val match = Regex("\\(\\d{4}\\)").find(rawTitle)
+        return if (match != null) {
+            // Cut exactly before the (YYYY) starts
+            rawTitle.substring(0, match.range.first).trim()
+        } else {
+            rawTitle.trim()
         }
-        return rawTitle.trim()
     }
 
     override val mainPage = mainPageOf(
