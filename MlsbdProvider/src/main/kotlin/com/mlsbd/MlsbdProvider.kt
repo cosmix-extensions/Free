@@ -49,15 +49,17 @@ class MlsbdProvider : MainAPI() {
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
     // --- Helper Functions for Title & TMDB Logic ---
+    
+    // Gets the year for TMDB. If format is (2006-2015), it extracts the first year (2006)
     private fun getYearFromTitle(rawTitle: String): Int? {
-        val match = Regex("\\((\\d{4})\\)").find(rawTitle)
+        val match = Regex("\\((\\d{4})(?:-\\d{4})?\\)").find(rawTitle)
         return match?.groupValues?.get(1)?.toIntOrNull()
     }
 
     // Cuts everything after the year for clean Cloudstream UI display
-    // e.g., "[18+] Movie Name (2025) 1080p..." -> "[18+] Movie Name (2025)"
+    // e.g., "[18+] Movie Name (2006-2015) 1080p..." -> "[18+] Movie Name (2006-2015)"
     private fun getDisplayTitle(rawTitle: String): String {
-        val match = Regex("\\(\\d{4}\\)").find(rawTitle)
+        val match = Regex("\\(\\d{4}(?:-\\d{4})?\\)").find(rawTitle)
         return if (match != null) {
             rawTitle.substring(0, match.range.last + 1).trim()
         } else {
@@ -72,8 +74,8 @@ class MlsbdProvider : MainAPI() {
         // Remove starting brackets like [18+], [Web Series], etc.
         clean = clean.replace(Regex("^\\[.*?]\\s*"), "")
         
-        // Remove (YYYY) and everything after it
-        val match = Regex("\\(\\d{4}\\)").find(clean)
+        // Remove (YYYY) or (YYYY-YYYY) and everything after it
+        val match = Regex("\\(\\d{4}(?:-\\d{4})?\\)").find(clean)
         if (match != null) {
             clean = clean.substring(0, match.range.first)
         }
