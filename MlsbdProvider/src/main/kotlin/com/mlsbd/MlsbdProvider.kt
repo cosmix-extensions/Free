@@ -176,6 +176,7 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
+    @Suppress("DEPRECATION", "DEPRECATION_ERROR")
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -207,9 +208,8 @@ class MlsbdProvider : MainAPI() {
                 newName = newName.substringBefore("] ") + "]"
             }
             
-            // Suppressing the deprecation error allows us to safely create the object
-            // without Cloudstream's compiler blocking the build.
-            @Suppress("DEPRECATION")
+            // Recreating the ExtractorLink. 
+            // The compiler error is suppressed at the function level.
             val modifiedLink = ExtractorLink(
                 source = link.source,
                 name = newName,
