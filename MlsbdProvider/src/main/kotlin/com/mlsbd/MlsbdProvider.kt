@@ -176,7 +176,7 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
-                override suspend fun loadLinks(
+    override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -207,9 +207,19 @@ class MlsbdProvider : MainAPI() {
                 newName = newName.substringBefore("] ") + "]"
             }
             
-            // Using Kotlin's copy() to safely change only the name 
-            // This avoids all deprecation and coroutine errors
-            val modifiedLink = link.copy(name = newName)
+            // Suppressing the deprecation error allows us to safely create the object
+            // without Cloudstream's compiler blocking the build.
+            @Suppress("DEPRECATION")
+            val modifiedLink = ExtractorLink(
+                source = link.source,
+                name = newName,
+                url = link.url,
+                referer = link.referer,
+                quality = link.quality,
+                isM3u8 = link.isM3u8,
+                headers = link.headers,
+                extractorData = link.extractorData
+            )
             
             // Send to the original callback
             callback.invoke(modifiedLink)
