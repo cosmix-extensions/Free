@@ -13,6 +13,18 @@ class MlsbdProvider : MainAPI() {
 
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
+    // A foolproof method to clean the title without using complex Regex
+    // This perfectly prevents old Cloudstream apps from crashing.
+    private fun cleanTitle(rawTitle: String): String {
+        for (year in 1950..2050) {
+            val yearStr = "($year)"
+            if (rawTitle.contains(yearStr)) {
+                return rawTitle.substringBefore(yearStr).trim()
+            }
+        }
+        return rawTitle.trim()
+    }
+
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Latest Movies",
         "$mainUrl/category/bollywood-movies/" to "Bollywood",
@@ -42,11 +54,8 @@ class MlsbdProvider : MainAPI() {
             val a = el.selectFirst(".post-desc a, .thumb a") ?: return@mapNotNull null
             val href = a.attr("abs:href").ifBlank { return@mapNotNull null }
             
-            // Getting the raw title first for logic
             val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@mapNotNull null
-            
-            // Cutting the title from (YYYY) and everything after it
-            val title = rawTitle.replace(Regex("\\s*\\(\\d{4}\\).*"), "").trim()
+            val title = cleanTitle(rawTitle)
             
             val poster = el.selectFirst("div.thumb img")?.attr("src")
             val isSeries = rawTitle.contains("Season", true) || rawTitle.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
@@ -64,11 +73,8 @@ class MlsbdProvider : MainAPI() {
             val a = el.selectFirst(".post-desc a, .thumb a") ?: return@mapNotNull null
             val href = a.attr("abs:href").ifBlank { return@mapNotNull null }
             
-            // Getting the raw title first for logic
             val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@mapNotNull null
-            
-            // Cutting the title from (YYYY) and everything after it
-            val title = rawTitle.replace(Regex("\\s*\\(\\d{4}\\).*"), "").trim()
+            val title = cleanTitle(rawTitle)
             
             val poster = el.selectFirst("div.thumb img")?.attr("src")
             val isSeries = rawTitle.contains("Season", true) || rawTitle.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
@@ -82,11 +88,8 @@ class MlsbdProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val doc = app.get(url, headers = ua, timeout = 60).document
         
-        // Getting the raw title first for logic parsing
         val rawTitle = doc.selectFirst("h1.entry-title, h1.post-title, h1")?.text()?.trim() ?: doc.title().trim()
-        
-        // Cutting the title from (YYYY) and everything after it for display
-        val title = rawTitle.replace(Regex("\\s*\\(\\d{4}\\).*"), "").trim()
+        val title = cleanTitle(rawTitle)
 
         var poster = doc.selectFirst("div.entry-content img.aligncenter, div.post-content img, div.content img")?.attr("src")
         if (poster == null || poster.contains("mlsbdshop")) {
@@ -108,7 +111,6 @@ class MlsbdProvider : MainAPI() {
             var currentEpNum = 1
             val episodeMap = mutableMapOf<Int, MutableList<String>>()
 
-            // Parsing logic based on rawTitle to keep seasons accurate
             val seasonMatch = Regex("(?i)Season[- ]?(\\d+)").find(rawTitle)
             val parsedSeason = seasonMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
 
@@ -171,7 +173,6 @@ class MlsbdProvider : MainAPI() {
             
             val sortedEpisodes = episodes.distinctBy { it.data }.sortedBy { it.episode }
 
-            // Loading title parameter is now beautifully short
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, sortedEpisodes) {
                 this.posterUrl = poster
                 this.plot = description
@@ -192,7 +193,6 @@ class MlsbdProvider : MainAPI() {
             }
             val dataStr = (iframes + links).distinct().joinToString(",")
             
-            // Loading title parameter is now beautifully short
             return newMovieLoadResponse(title, url, TvType.Movie, dataStr) {
                 this.posterUrl = poster
                 this.plot = description
@@ -221,7 +221,6 @@ class MlsbdProvider : MainAPI() {
 
         val sortedUrls = urls.sortedBy { getQualityScore(it.substringAfterLast("|", "Unknown")) }
 
-        // Using Reflection to securely change the name on old Cloudstream apps
         val customCallback: (ExtractorLink) -> Unit = { link ->
             var newName = link.name
             
@@ -230,15 +229,13 @@ class MlsbdProvider : MainAPI() {
             }
             
             try {
-                // Hacking the internal 'name' variable of the object to change it silently
                 val field = link::class.java.getDeclaredField("name")
                 field.isAccessible = true
                 field.set(link, newName)
             } catch (e: Exception) {
-                e.printStackTrace() // Fallback just in case
+                e.printStackTrace()
             }
             
-            // Sending the original object but with our modified short name
             callback.invoke(link)
         }
 
