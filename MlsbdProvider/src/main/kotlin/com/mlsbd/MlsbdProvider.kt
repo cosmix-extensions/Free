@@ -176,7 +176,6 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
-    @Suppress("DEPRECATION", "DEPRECATION_ERROR")
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -198,31 +197,26 @@ class MlsbdProvider : MainAPI() {
 
         val sortedUrls = urls.sortedBy { getQualityScore(it.substringAfterLast("|", "Unknown")) }
 
-        // This custom callback modifies the long name before sending it to Cloudstream UI
+        // Using Reflection to securely change the name on old Cloudstream apps
+        // without triggering any constructor mismatch errors.
         val customCallback: (ExtractorLink) -> Unit = { link ->
             var newName = link.name
             
-            // If the name has something like "Hub-Cloud[Pixeldrain] MovieName..."
             if (newName.contains("] ")) {
-                // Cut everything after the first "] " and keep the closing bracket "]"
                 newName = newName.substringBefore("] ") + "]"
             }
             
-            // Recreating the ExtractorLink. 
-            // The compiler error is suppressed at the function level.
-            val modifiedLink = ExtractorLink(
-                source = link.source,
-                name = newName,
-                url = link.url,
-                referer = link.referer,
-                quality = link.quality,
-                isM3u8 = link.isM3u8,
-                headers = link.headers,
-                extractorData = link.extractorData
-            )
+            try {
+                // Hacking the internal 'name' variable of the object to change it silently
+                val field = link::class.java.getDeclaredField("name")
+                field.isAccessible = true
+                field.set(link, newName)
+            } catch (e: Exception) {
+                e.printStackTrace() // Fallback just in case
+            }
             
-            // Send to the original callback
-            callback.invoke(modifiedLink)
+            // Sending the original object but with our modified short name
+            callback.invoke(link)
         }
 
         suspend fun invokeExtractor(targetUrl: String, referer: String?) {
