@@ -1,3 +1,4 @@
+
 package com.mlsbd
 
 import com.fasterxml.jackson.annotation.JsonProperty
@@ -43,17 +44,24 @@ class MlsbdProvider : MainAPI() {
 
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    // --- TMDB API Constants ---
-    private val TMDB_API = "https://api.themoviedb.org/3"
-    private val TMDB_KEY = "1865f43a0549ca50d341dd9ab8b29f49"
-    private val TMDB_IMG = "https://image.tmdb.org/t/p/original"
-
     // --- Helper Functions for Title & TMDB Logic ---
     private fun getYearFromTitle(rawTitle: String): Int? {
         val match = Regex("\\((\\d{4})\\)").find(rawTitle)
         return match?.groupValues?.get(1)?.toIntOrNull()
     }
 
+    // Cuts everything after the year for clean Cloudstream UI display
+    // e.g., "[18+] Movie Name (2025) 1080p..." -> "[18+] Movie Name (2025)"
+    private fun getDisplayTitle(rawTitle: String): String {
+        val match = Regex("\\(\\d{4}\\)").find(rawTitle)
+        return if (match != null) {
+            rawTitle.substring(0, match.range.last + 1).trim()
+        } else {
+            rawTitle.trim()
+        }
+    }
+
+    // Cleans title purely for TMDB searching (Removes [18+] and Year)
     private fun cleanTitleForTmdb(rawTitle: String): String {
         var clean = rawTitle
         
@@ -206,12 +214,13 @@ class MlsbdProvider : MainAPI() {
         
         val elements = doc.select("div.single-post, article.main-post-area div.single-post").toList()
         
-        // Using amap to fetch TMDB posters in parallel without blocking UI
         val items = elements.amap { el ->
             val a = el.selectFirst(".post-desc a, .thumb a") ?: return@amap null
             val href = a.attr("abs:href").ifBlank { return@amap null }
             
             val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@amap null
+            
+            val displayTitle = getDisplayTitle(rawTitle)
             val cleanTitle = cleanTitleForTmdb(rawTitle)
             val year = getYearFromTitle(rawTitle)
             
@@ -221,8 +230,8 @@ class MlsbdProvider : MainAPI() {
             val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year)
             val finalPoster = tmdbAssets.poster ?: originalPoster
             
-            if (isSeries) newTvSeriesSearchResponse(rawTitle, href, TvType.TvSeries) { this.posterUrl = finalPoster }
-            else newMovieSearchResponse(rawTitle, href, TvType.Movie) { this.posterUrl = finalPoster }
+            if (isSeries) newTvSeriesSearchResponse(displayTitle, href, TvType.TvSeries) { this.posterUrl = finalPoster }
+            else newMovieSearchResponse(displayTitle, href, TvType.Movie) { this.posterUrl = finalPoster }
         }.filterNotNull()
         
         return newHomePageResponse(request.name, items, items.isNotEmpty() && page < 50)
@@ -238,6 +247,8 @@ class MlsbdProvider : MainAPI() {
             val href = a.attr("abs:href").ifBlank { return@amap null }
             
             val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@amap null
+            
+            val displayTitle = getDisplayTitle(rawTitle)
             val cleanTitle = cleanTitleForTmdb(rawTitle)
             val year = getYearFromTitle(rawTitle)
             
@@ -247,8 +258,8 @@ class MlsbdProvider : MainAPI() {
             val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year)
             val finalPoster = tmdbAssets.poster ?: originalPoster
             
-            if (isSeries) newTvSeriesSearchResponse(rawTitle, href, TvType.TvSeries) { this.posterUrl = finalPoster }
-            else newMovieSearchResponse(rawTitle, href, TvType.Movie) { this.posterUrl = finalPoster }
+            if (isSeries) newTvSeriesSearchResponse(displayTitle, href, TvType.TvSeries) { this.posterUrl = finalPoster }
+            else newMovieSearchResponse(displayTitle, href, TvType.Movie) { this.posterUrl = finalPoster }
         }.filterNotNull()
         
         return items
@@ -258,6 +269,8 @@ class MlsbdProvider : MainAPI() {
         val doc = app.get(url, headers = ua, timeout = 60).document
         
         val rawTitle = doc.selectFirst("h1.entry-title, h1.post-title, h1")?.text()?.trim() ?: doc.title().trim()
+        
+        val displayTitle = getDisplayTitle(rawTitle)
         val cleanTitle = cleanTitleForTmdb(rawTitle)
         val year = getYearFromTitle(rawTitle)
 
@@ -286,7 +299,7 @@ class MlsbdProvider : MainAPI() {
                        url.contains("episode", true) || url.contains("season", true) || 
                        (contentArea?.text()?.contains(Regex("(?i)(Download Now Epi|Download Episode|Episode \\d+)")) == true)
 
-        // Fetching TMDB Assets using IMDB ID (Priority) or Clean Title + Year
+        // Fetching TMDB Assets
         val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year, imdbId)
         
         val finalPoster = tmdbAssets.poster ?: originalPoster
@@ -360,7 +373,7 @@ class MlsbdProvider : MainAPI() {
             
             val sortedEpisodes = episodes.distinctBy { it.data }.sortedBy { it.episode }
 
-            return newTvSeriesLoadResponse(rawTitle, url, TvType.TvSeries, sortedEpisodes) {
+            return newTvSeriesLoadResponse(displayTitle, url, TvType.TvSeries, sortedEpisodes) {
                 this.posterUrl = finalPoster
                 this.backgroundPosterUrl = finalBackdrop
                 this.logoUrl = finalLogo
@@ -383,7 +396,7 @@ class MlsbdProvider : MainAPI() {
             }
             val dataStr = (iframes + links).distinct().joinToString(",")
             
-            return newMovieLoadResponse(rawTitle, url, TvType.Movie, dataStr) {
+            return newMovieLoadResponse(displayTitle, url, TvType.Movie, dataStr) {
                 this.posterUrl = finalPoster
                 this.backgroundPosterUrl = finalBackdrop
                 this.logoUrl = finalLogo
