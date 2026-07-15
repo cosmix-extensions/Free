@@ -41,9 +41,16 @@ class MlsbdProvider : MainAPI() {
         val items = doc.select("div.single-post, article.main-post-area div.single-post").mapNotNull { el ->
             val a = el.selectFirst(".post-desc a, .thumb a") ?: return@mapNotNull null
             val href = a.attr("abs:href").ifBlank { return@mapNotNull null }
-            val title = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@mapNotNull null
+            
+            // Getting the raw title first for logic
+            val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@mapNotNull null
+            
+            // Cutting the title from (YYYY) and everything after it
+            val title = rawTitle.replace(Regex("\\s*\\(\\d{4}\\).*"), "").trim()
+            
             val poster = el.selectFirst("div.thumb img")?.attr("src")
-            val isSeries = title.contains("Season", true) || title.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
+            val isSeries = rawTitle.contains("Season", true) || rawTitle.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
+            
             if (isSeries) newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = poster }
             else newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = poster }
         }
@@ -56,9 +63,16 @@ class MlsbdProvider : MainAPI() {
         val items = doc.select("div.single-post").mapNotNull { el ->
             val a = el.selectFirst(".post-desc a, .thumb a") ?: return@mapNotNull null
             val href = a.attr("abs:href").ifBlank { return@mapNotNull null }
-            val title = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@mapNotNull null
+            
+            // Getting the raw title first for logic
+            val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@mapNotNull null
+            
+            // Cutting the title from (YYYY) and everything after it
+            val title = rawTitle.replace(Regex("\\s*\\(\\d{4}\\).*"), "").trim()
+            
             val poster = el.selectFirst("div.thumb img")?.attr("src")
-            val isSeries = title.contains("Season", true) || title.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
+            val isSeries = rawTitle.contains("Season", true) || rawTitle.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
+            
             if (isSeries) newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = poster }
             else newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = poster }
         }
@@ -67,7 +81,13 @@ class MlsbdProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val doc = app.get(url, headers = ua, timeout = 60).document
-        val title = doc.selectFirst("h1.entry-title, h1.post-title, h1")?.text()?.trim() ?: doc.title().trim()
+        
+        // Getting the raw title first for logic parsing
+        val rawTitle = doc.selectFirst("h1.entry-title, h1.post-title, h1")?.text()?.trim() ?: doc.title().trim()
+        
+        // Cutting the title from (YYYY) and everything after it for display
+        val title = rawTitle.replace(Regex("\\s*\\(\\d{4}\\).*"), "").trim()
+
         var poster = doc.selectFirst("div.entry-content img.aligncenter, div.post-content img, div.content img")?.attr("src")
         if (poster == null || poster.contains("mlsbdshop")) {
             poster = doc.select("img").firstOrNull { it.attr("src").contains("uploads/images") }?.attr("src") ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
@@ -79,7 +99,7 @@ class MlsbdProvider : MainAPI() {
         }
 
         val contentArea = doc.selectFirst("div.entry-content, div.post-content, div.content")
-        val isSeries = title.contains("Episode", true) || title.contains("Season", true) || 
+        val isSeries = rawTitle.contains("Episode", true) || rawTitle.contains("Season", true) || 
                        url.contains("episode", true) || url.contains("season", true) || 
                        (contentArea?.text()?.contains(Regex("(?i)(Download Now Epi|Download Episode|Episode \\d+)")) == true)
 
@@ -88,7 +108,8 @@ class MlsbdProvider : MainAPI() {
             var currentEpNum = 1
             val episodeMap = mutableMapOf<Int, MutableList<String>>()
 
-            val seasonMatch = Regex("(?i)Season[- ]?(\\d+)").find(title)
+            // Parsing logic based on rawTitle to keep seasons accurate
+            val seasonMatch = Regex("(?i)Season[- ]?(\\d+)").find(rawTitle)
             val parsedSeason = seasonMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
 
             for (tag in contentArea.children()) {
@@ -150,6 +171,7 @@ class MlsbdProvider : MainAPI() {
             
             val sortedEpisodes = episodes.distinctBy { it.data }.sortedBy { it.episode }
 
+            // Loading title parameter is now beautifully short
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, sortedEpisodes) {
                 this.posterUrl = poster
                 this.plot = description
@@ -169,6 +191,8 @@ class MlsbdProvider : MainAPI() {
                 } else null
             }
             val dataStr = (iframes + links).distinct().joinToString(",")
+            
+            // Loading title parameter is now beautifully short
             return newMovieLoadResponse(title, url, TvType.Movie, dataStr) {
                 this.posterUrl = poster
                 this.plot = description
@@ -198,7 +222,6 @@ class MlsbdProvider : MainAPI() {
         val sortedUrls = urls.sortedBy { getQualityScore(it.substringAfterLast("|", "Unknown")) }
 
         // Using Reflection to securely change the name on old Cloudstream apps
-        // without triggering any constructor mismatch errors.
         val customCallback: (ExtractorLink) -> Unit = { link ->
             var newName = link.name
             
