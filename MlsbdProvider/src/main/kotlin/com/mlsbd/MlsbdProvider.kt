@@ -48,36 +48,42 @@ class MlsbdProvider : MainAPI() {
 
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    // --- Helper Functions for Title & TMDB Logic ---
+    // --- Helper Functions for Title & TMDB Logic (100% Crash-Proof for Old Cloudstream) ---
     
-    // Gets the year for TMDB. If format is (2006-2015), it extracts the first year (2006)
     private fun getYearFromTitle(rawTitle: String): Int? {
-        val match = Regex("\\((\\d{4})(?:-\\d{4})?\\)").find(rawTitle)
-        return match?.groupValues?.get(1)?.toIntOrNull()
-    }
-
-    // Cuts everything after the year for clean Cloudstream UI display
-    // e.g., "[18+] Movie Name (2006-2015) 1080p..." -> "[18+] Movie Name (2006-2015)"
-    private fun getDisplayTitle(rawTitle: String): String {
-        val match = Regex("\\(\\d{4}(?:-\\d{4})?\\)").find(rawTitle)
-        return if (match != null) {
-            rawTitle.substring(0, match.range.last + 1).trim()
-        } else {
-            rawTitle.trim()
+        val doubleMatch = Regex("\\((\\d{4})-\\d{4}\\)").find(rawTitle)
+        if (doubleMatch != null) {
+            return doubleMatch.groupValues[1].toIntOrNull()
         }
+        val singleMatch = Regex("\\((\\d{4})\\)").find(rawTitle)
+        if (singleMatch != null) {
+            return singleMatch.groupValues[1].toIntOrNull()
+        }
+        return null
     }
 
-    // Cleans title purely for TMDB searching (Removes [18+] and Year)
+    private fun getDisplayTitle(rawTitle: String): String {
+        val doubleMatch = Regex("\\(\\d{4}-\\d{4}\\)").find(rawTitle)
+        if (doubleMatch != null) {
+            return rawTitle.substringBefore(doubleMatch.value).trim() + " " + doubleMatch.value
+        }
+        val singleMatch = Regex("\\(\\d{4}\\)").find(rawTitle)
+        if (singleMatch != null) {
+            return rawTitle.substringBefore(singleMatch.value).trim() + " " + singleMatch.value
+        }
+        return rawTitle.trim()
+    }
+
     private fun cleanTitleForTmdb(rawTitle: String): String {
-        var clean = rawTitle
+        var clean = rawTitle.replace(Regex("^\\[.*?]\\s*"), "")
         
-        // Remove starting brackets like [18+], [Web Series], etc.
-        clean = clean.replace(Regex("^\\[.*?]\\s*"), "")
-        
-        // Remove (YYYY) or (YYYY-YYYY) and everything after it
-        val match = Regex("\\(\\d{4}(?:-\\d{4})?\\)").find(clean)
-        if (match != null) {
-            clean = clean.substring(0, match.range.first)
+        val doubleMatch = Regex("\\(\\d{4}-\\d{4}\\)").find(clean)
+        if (doubleMatch != null) {
+            return clean.substringBefore(doubleMatch.value).trim()
+        }
+        val singleMatch = Regex("\\(\\d{4}\\)").find(clean)
+        if (singleMatch != null) {
+            return clean.substringBefore(singleMatch.value).trim()
         }
         return clean.trim()
     }
@@ -114,7 +120,6 @@ class MlsbdProvider : MainAPI() {
             var tmdbId: Int? = null
             var actualMediaType = if (isSeries) "tv" else "movie"
 
-            // 1. Try finding by IMDB ID first if provided
             if (imdbId != null && imdbId.startsWith("tt")) {
                 val findRes = app.get("$TMDB_API/find/$imdbId?api_key=$TMDB_KEY&external_source=imdb_id").parsedSafe<TmdbFind>()
                 val tvId = findRes?.tvShows?.firstOrNull()?.id
@@ -126,7 +131,6 @@ class MlsbdProvider : MainAPI() {
                 else if (tvId != null) { tmdbId = tvId; actualMediaType = "tv" }
             }
 
-            // 2. Search by Title if IMDB ID failed or wasn't provided
             if (tmdbId == null) {
                 val safeTitle = encodeUri(title)
                 val searchRes = app.get("$TMDB_API/search/multi?api_key=$TMDB_KEY&query=$safeTitle").parsedSafe<TmdbSearch>()
@@ -134,7 +138,6 @@ class MlsbdProvider : MainAPI() {
                 
                 val normTitle = normalizeTitle(title)
                 
-                // Exact Match
                 val exactCandidates = validResults?.filter { normalizeTitle(it.title) == normTitle || normalizeTitle(it.name) == normTitle } ?: emptyList()
                 val exactMatch = pickBestResult(exactCandidates, year)
 
@@ -142,7 +145,6 @@ class MlsbdProvider : MainAPI() {
                     tmdbId = exactMatch.id
                     actualMediaType = exactMatch.mediaType ?: actualMediaType
                 } else {
-                    // Starts-With Match
                     val startsWithCandidates = if (normTitle.length >= 5) {
                         validResults?.filter { normalizeTitle(it.title ?: it.name).startsWith(normTitle) } ?: emptyList()
                     } else emptyList()
@@ -157,24 +159,20 @@ class MlsbdProvider : MainAPI() {
 
             if (tmdbId == null) return TmdbAssets(null, null, null)
 
-            // 3. Fetch Images based on ID
             val images = app.get("$TMDB_API/$actualMediaType/$tmdbId/images?api_key=$TMDB_KEY").parsedSafe<TmdbImages>()
 
-            // Poster: en -> null -> bn -> hi -> first
             val poster = images?.posters?.firstOrNull { it.lang == "en" }
                 ?: images?.posters?.firstOrNull { it.lang == null }
                 ?: images?.posters?.firstOrNull { it.lang == "bn" }
                 ?: images?.posters?.firstOrNull { it.lang == "hi" }
                 ?: images?.posters?.firstOrNull()
 
-            // Logo: en -> null -> bn -> hi -> first
             val logo = images?.logos?.firstOrNull { it.lang == "en" }
                 ?: images?.logos?.firstOrNull { it.lang == null }
                 ?: images?.logos?.firstOrNull { it.lang == "bn" }
                 ?: images?.logos?.firstOrNull { it.lang == "hi" }
                 ?: images?.logos?.firstOrNull()
 
-            // Backdrop: null -> en -> bn -> hi -> first
             val backdrop = images?.backdrops?.firstOrNull { it.lang == null }
                 ?: images?.backdrops?.firstOrNull { it.lang == "en" }
                 ?: images?.backdrops?.firstOrNull { it.lang == "bn" }
@@ -285,7 +283,6 @@ class MlsbdProvider : MainAPI() {
             originalPoster = doc.select("img").firstOrNull { it.attr("src").contains("uploads/images") }?.attr("src") ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
         }
 
-        // Storyline Extraction
         var description = doc.selectFirst("div.storyline")?.text()
             ?.replace(Regex("(?i)Storyline\\s*:"), "")?.trim()
 
@@ -296,7 +293,6 @@ class MlsbdProvider : MainAPI() {
             }
         }
 
-        // IMDB ID Extraction
         val imdbId = doc.selectFirst("a[href*='imdb.com/title']")?.attr("href")
             ?.substringAfter("title/")?.substringBefore("/")?.takeIf { it.startsWith("tt") }
 
@@ -305,7 +301,6 @@ class MlsbdProvider : MainAPI() {
                        url.contains("episode", true) || url.contains("season", true) || 
                        (contentArea?.text()?.contains(Regex("(?i)(Download Now Epi|Download Episode|Episode \\d+)")) == true)
 
-        // Fetching TMDB Assets
         val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year, imdbId)
         
         val finalPoster = tmdbAssets.poster ?: originalPoster
