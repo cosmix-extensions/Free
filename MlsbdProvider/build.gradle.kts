@@ -1,7 +1,7 @@
 version = 1
 
 cloudstream {
-    language = "bn"
+    language = "hi"
     authors = listOf("Your Name")
     description = "MLSBD Provider for Movies and TV Series"
     /**
