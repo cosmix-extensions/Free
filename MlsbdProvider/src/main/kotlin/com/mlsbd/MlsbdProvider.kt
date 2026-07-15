@@ -1,4 +1,3 @@
-
 package com.mlsbd
 
 import com.fasterxml.jackson.annotation.JsonProperty
@@ -6,6 +5,11 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+
+// --- TMDB API Constants (Moved globally to prevent unresolved reference errors) ---
+const val TMDB_API = "https://api.themoviedb.org/3"
+const val TMDB_KEY = "1865f43a0549ca50d341dd9ab8b29f49"
+const val TMDB_IMG = "https://image.tmdb.org/t/p/original"
 
 // --- TMDB Data Classes ---
 data class TmdbImages(
