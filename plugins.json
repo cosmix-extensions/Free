@@ -2,7 +2,7 @@
     {
         "url": "https://raw.githubusercontent.com/cosmix-extensions/Free/builds/MlsbdProvider.cs3",
         "status": 1,
-        "version": 1,
+        "version": 2,
         "name": "MlsbdProvider",
         "internalName": "MlsbdProvider",
         "authors": [
@@ -21,6 +21,6 @@
         ],
         "iconUrl": "https://mlsbd.co/wp-content/uploads/2020/09/mlsbd-icon.png",
         "apiVersion": 1,
-        "fileHash": "sha256-f9975fecb7babe942cff970ee3da68b7041dc751e08bccc96c066f9d99c32641"
+        "fileHash": "sha256-5bd595d8d2c441d7caea3d4d6b2691cad8644437753cf7a4fb7408e83ede1812"
     }
 ]
