@@ -176,7 +176,7 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
-        override suspend fun loadLinks(
+            override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -207,13 +207,13 @@ class MlsbdProvider : MainAPI() {
                 newName = newName.substringBefore("] ") + "]"
             }
             
-            // Create a new link object with the cleanly formatted short name
-            val modifiedLink = ExtractorLink(
+            // Using newExtractorLink instead of ExtractorLink as required by recent Cloudstream updates
+            val modifiedLink = newExtractorLink(
                 source = link.source,
                 name = newName,
                 url = link.url,
                 referer = link.referer,
-                quality = link.quality, // Cloudstream handles the quality text like 1080p
+                quality = link.quality, 
                 isM3u8 = link.isM3u8,
                 headers = link.headers,
                 extractorData = link.extractorData
