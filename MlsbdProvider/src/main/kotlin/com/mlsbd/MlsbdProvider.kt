@@ -176,12 +176,7 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
-         override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
+    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         if (data.isBlank()) return false
         val urls = data.split(",")
 
@@ -212,12 +207,10 @@ class MlsbdProvider : MainAPI() {
                 }
                 else loadExtractor(targetUrl, subtitleCallback, callback)
             } catch (e: Exception) {
-                // If the extractor fails (e.g., video deleted), it will catch the error here
                 e.printStackTrace()
             }
         }
 
-        // Using amap instead of apmap for suspended contexts
         sortedUrls.amap { item ->
             if (item.isNotBlank()) {
                 val parts = item.split("|")
@@ -235,7 +228,6 @@ class MlsbdProvider : MainAPI() {
                             
                             val allLinks = (urlRegex.findAll(slHtml).map { it.value }.toList() + aLinks).distinct()
                             
-                            // Using amap here as well
                             allLinks.amap { slUrl ->
                                 if (validHosts.any { slUrl.contains(it, true) }) {
                                     invokeExtractor(slUrl, url)
@@ -253,3 +245,4 @@ class MlsbdProvider : MainAPI() {
         
         return true
     }
+}
