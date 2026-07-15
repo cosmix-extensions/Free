@@ -1,8 +1,38 @@
 package com.mlsbd
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+
+// --- TMDB Data Classes ---
+data class TmdbImages(
+    @JsonProperty("logos") val logos: List<TmdbImage>? = null,
+    @JsonProperty("backdrops") val backdrops: List<TmdbImage>? = null,
+    @JsonProperty("posters") val posters: List<TmdbImage>? = null
+)
+data class TmdbImage(
+    @JsonProperty("file_path") val filePath: String? = null,
+    @JsonProperty("iso_639_1") val lang: String? = null
+)
+data class TmdbFind(
+    @JsonProperty("movie_results") val movies: List<TmdbResult>? = null,
+    @JsonProperty("tv_results") val tvShows: List<TmdbResult>? = null
+)
+data class TmdbResult(
+    @JsonProperty("id") val id: Int? = null,
+    @JsonProperty("media_type") val mediaType: String? = null,
+    @JsonProperty("title") val title: String? = null,
+    @JsonProperty("name") val name: String? = null,
+    @JsonProperty("release_date") val releaseDate: String? = null,
+    @JsonProperty("first_air_date") val firstAirDate: String? = null
+)
+data class TmdbSearch(
+    @JsonProperty("results") val results: List<TmdbResult>? = null
+)
+data class TmdbAssets(val poster: String?, val logo: String?, val backdrop: String?)
+// -------------------------
 
 class MlsbdProvider : MainAPI() {
     override var mainUrl = "https://mlsbd.co"
@@ -13,14 +43,138 @@ class MlsbdProvider : MainAPI() {
 
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    // Modern and smart Kotlin approach using Regex to find (YYYY)
-    private fun cleanTitle(rawTitle: String): String {
-        val match = Regex("\\(\\d{4}\\)").find(rawTitle)
-        return if (match != null) {
-            // Cut exactly before the (YYYY) starts
-            rawTitle.substring(0, match.range.first).trim()
-        } else {
-            rawTitle.trim()
+    // --- TMDB API Constants ---
+    private val TMDB_API = "https://api.themoviedb.org/3"
+    private val TMDB_KEY = "1865f43a0549ca50d341dd9ab8b29f49"
+    private val TMDB_IMG = "https://image.tmdb.org/t/p/original"
+
+    // --- Helper Functions for Title & TMDB Logic ---
+    private fun getYearFromTitle(rawTitle: String): Int? {
+        val match = Regex("\\((\\d{4})\\)").find(rawTitle)
+        return match?.groupValues?.get(1)?.toIntOrNull()
+    }
+
+    private fun cleanTitleForTmdb(rawTitle: String): String {
+        var clean = rawTitle
+        
+        // Remove starting brackets like [18+], [Web Series], etc.
+        clean = clean.replace(Regex("^\\[.*?]\\s*"), "")
+        
+        // Remove (YYYY) and everything after it
+        val match = Regex("\\(\\d{4}\\)").find(clean)
+        if (match != null) {
+            clean = clean.substring(0, match.range.first)
+        }
+        return clean.trim()
+    }
+
+    private fun encodeUri(text: String): String {
+        return text.replace("%", "%25").replace(" ", "%20").replace("#", "%23")
+            .replace("&", "%26").replace("?", "%3F").replace("=", "%3D")
+            .replace(":", "%3A").replace("/", "%2F").replace("'", "%27")
+            .replace("\"", "%22").replace(",", "%2C")
+    }
+
+    private fun normalizeTitle(s: String?): String {
+        return s?.replace(Regex("[^a-zA-Z0-9]"), "")?.lowercase() ?: ""
+    }
+
+    private fun getResultYear(result: TmdbResult): Int? {
+        return (result.releaseDate ?: result.firstAirDate)?.substringBefore("-")?.toIntOrNull()
+    }
+
+    private fun yearMatches(tmdbYear: Int?, siteYear: Int?): Boolean {
+        if (siteYear == null || tmdbYear == null) return true
+        return Math.abs(tmdbYear - siteYear) <= 1
+    }
+
+    private fun pickBestResult(candidates: List<TmdbResult>, siteYear: Int?): TmdbResult? {
+        if (candidates.isEmpty()) return null
+        if (siteYear == null || candidates.size == 1) return candidates.first()
+        return candidates.firstOrNull { yearMatches(getResultYear(it), siteYear) }
+            ?: candidates.first()
+    }
+
+    private suspend fun fetchTmdbAssets(title: String, isSeries: Boolean, year: Int?, imdbId: String? = null): TmdbAssets {
+        return try {
+            var tmdbId: Int? = null
+            var actualMediaType = if (isSeries) "tv" else "movie"
+
+            // 1. Try finding by IMDB ID first if provided
+            if (imdbId != null && imdbId.startsWith("tt")) {
+                val findRes = app.get("$TMDB_API/find/$imdbId?api_key=$TMDB_KEY&external_source=imdb_id").parsedSafe<TmdbFind>()
+                val tvId = findRes?.tvShows?.firstOrNull()?.id
+                val movieId = findRes?.movies?.firstOrNull()?.id
+
+                if (isSeries && tvId != null) { tmdbId = tvId; actualMediaType = "tv" }
+                else if (!isSeries && movieId != null) { tmdbId = movieId; actualMediaType = "movie" }
+                else if (movieId != null) { tmdbId = movieId; actualMediaType = "movie" }
+                else if (tvId != null) { tmdbId = tvId; actualMediaType = "tv" }
+            }
+
+            // 2. Search by Title if IMDB ID failed or wasn't provided
+            if (tmdbId == null) {
+                val safeTitle = encodeUri(title)
+                val searchRes = app.get("$TMDB_API/search/multi?api_key=$TMDB_KEY&query=$safeTitle").parsedSafe<TmdbSearch>()
+                val validResults = searchRes?.results?.filter { it.mediaType == "movie" || it.mediaType == "tv" }
+                
+                val normTitle = normalizeTitle(title)
+                
+                // Exact Match
+                val exactCandidates = validResults?.filter { normalizeTitle(it.title) == normTitle || normalizeTitle(it.name) == normTitle } ?: emptyList()
+                val exactMatch = pickBestResult(exactCandidates, year)
+
+                if (exactMatch != null) {
+                    tmdbId = exactMatch.id
+                    actualMediaType = exactMatch.mediaType ?: actualMediaType
+                } else {
+                    // Starts-With Match
+                    val startsWithCandidates = if (normTitle.length >= 5) {
+                        validResults?.filter { normalizeTitle(it.title ?: it.name).startsWith(normTitle) } ?: emptyList()
+                    } else emptyList()
+                    
+                    val startsWithMatch = pickBestResult(startsWithCandidates, year)
+                    if (startsWithMatch != null) {
+                        tmdbId = startsWithMatch.id
+                        actualMediaType = startsWithMatch.mediaType ?: actualMediaType
+                    }
+                }
+            }
+
+            if (tmdbId == null) return TmdbAssets(null, null, null)
+
+            // 3. Fetch Images based on ID
+            val images = app.get("$TMDB_API/$actualMediaType/$tmdbId/images?api_key=$TMDB_KEY").parsedSafe<TmdbImages>()
+
+            // Poster: en -> null -> bn -> hi -> first
+            val poster = images?.posters?.firstOrNull { it.lang == "en" }
+                ?: images?.posters?.firstOrNull { it.lang == null }
+                ?: images?.posters?.firstOrNull { it.lang == "bn" }
+                ?: images?.posters?.firstOrNull { it.lang == "hi" }
+                ?: images?.posters?.firstOrNull()
+
+            // Logo: en -> null -> bn -> hi -> first
+            val logo = images?.logos?.firstOrNull { it.lang == "en" }
+                ?: images?.logos?.firstOrNull { it.lang == null }
+                ?: images?.logos?.firstOrNull { it.lang == "bn" }
+                ?: images?.logos?.firstOrNull { it.lang == "hi" }
+                ?: images?.logos?.firstOrNull()
+
+            // Backdrop: null -> en -> bn -> hi -> first
+            val backdrop = images?.backdrops?.firstOrNull { it.lang == null }
+                ?: images?.backdrops?.firstOrNull { it.lang == "en" }
+                ?: images?.backdrops?.firstOrNull { it.lang == "bn" }
+                ?: images?.backdrops?.firstOrNull { it.lang == "hi" }
+                ?: images?.backdrops?.firstOrNull()
+
+            val posterUrl = poster?.filePath?.let { "$TMDB_IMG$it" }
+            val logoUrl = logo?.filePath?.let { "$TMDB_IMG$it" }
+            val backdropUrl = backdrop?.filePath?.let { "$TMDB_IMG$it" }
+
+            TmdbAssets(posterUrl, logoUrl, backdropUrl)
+
+        } catch (e: Exception) {
+            TmdbAssets(null, null, null)
         }
     }
 
@@ -49,38 +203,54 @@ class MlsbdProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page == 1) request.data else "${request.data.trimEnd('/')}/page/$page/"
         val doc = app.get(url, headers = ua, timeout = 60).document
-        val items = doc.select("div.single-post, article.main-post-area div.single-post").mapNotNull { el ->
-            val a = el.selectFirst(".post-desc a, .thumb a") ?: return@mapNotNull null
-            val href = a.attr("abs:href").ifBlank { return@mapNotNull null }
+        
+        val elements = doc.select("div.single-post, article.main-post-area div.single-post").toList()
+        
+        // Using amap to fetch TMDB posters in parallel without blocking UI
+        val items = elements.amap { el ->
+            val a = el.selectFirst(".post-desc a, .thumb a") ?: return@amap null
+            val href = a.attr("abs:href").ifBlank { return@amap null }
             
-            val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@mapNotNull null
-            val title = cleanTitle(rawTitle)
+            val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@amap null
+            val cleanTitle = cleanTitleForTmdb(rawTitle)
+            val year = getYearFromTitle(rawTitle)
             
-            val poster = el.selectFirst("div.thumb img")?.attr("src")
+            val originalPoster = el.selectFirst("div.thumb img")?.attr("src")
             val isSeries = rawTitle.contains("Season", true) || rawTitle.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
             
-            if (isSeries) newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = poster }
-            else newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = poster }
-        }
+            val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year)
+            val finalPoster = tmdbAssets.poster ?: originalPoster
+            
+            if (isSeries) newTvSeriesSearchResponse(rawTitle, href, TvType.TvSeries) { this.posterUrl = finalPoster }
+            else newMovieSearchResponse(rawTitle, href, TvType.Movie) { this.posterUrl = finalPoster }
+        }.filterNotNull()
+        
         return newHomePageResponse(request.name, items, items.isNotEmpty() && page < 50)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/?s=${java.net.URLEncoder.encode(query, "UTF-8")}"
         val doc = app.get(url, headers = ua, timeout = 60).document
-        val items = doc.select("div.single-post").mapNotNull { el ->
-            val a = el.selectFirst(".post-desc a, .thumb a") ?: return@mapNotNull null
-            val href = a.attr("abs:href").ifBlank { return@mapNotNull null }
+        
+        val elements = doc.select("div.single-post").toList()
+        val items = elements.amap { el ->
+            val a = el.selectFirst(".post-desc a, .thumb a") ?: return@amap null
+            val href = a.attr("abs:href").ifBlank { return@amap null }
             
-            val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@mapNotNull null
-            val title = cleanTitle(rawTitle)
+            val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@amap null
+            val cleanTitle = cleanTitleForTmdb(rawTitle)
+            val year = getYearFromTitle(rawTitle)
             
-            val poster = el.selectFirst("div.thumb img")?.attr("src")
+            val originalPoster = el.selectFirst("div.thumb img")?.attr("src")
             val isSeries = rawTitle.contains("Season", true) || rawTitle.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
             
-            if (isSeries) newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = poster }
-            else newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = poster }
-        }
+            val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year)
+            val finalPoster = tmdbAssets.poster ?: originalPoster
+            
+            if (isSeries) newTvSeriesSearchResponse(rawTitle, href, TvType.TvSeries) { this.posterUrl = finalPoster }
+            else newMovieSearchResponse(rawTitle, href, TvType.Movie) { this.posterUrl = finalPoster }
+        }.filterNotNull()
+        
         return items
     }
 
@@ -88,17 +258,17 @@ class MlsbdProvider : MainAPI() {
         val doc = app.get(url, headers = ua, timeout = 60).document
         
         val rawTitle = doc.selectFirst("h1.entry-title, h1.post-title, h1")?.text()?.trim() ?: doc.title().trim()
-        val title = cleanTitle(rawTitle)
+        val cleanTitle = cleanTitleForTmdb(rawTitle)
+        val year = getYearFromTitle(rawTitle)
 
-        var poster = doc.selectFirst("div.entry-content img.aligncenter, div.post-content img, div.content img")?.attr("src")
-        if (poster == null || poster.contains("mlsbdshop")) {
-            poster = doc.select("img").firstOrNull { it.attr("src").contains("uploads/images") }?.attr("src") ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
+        var originalPoster = doc.selectFirst("div.entry-content img.aligncenter, div.post-content img, div.content img")?.attr("src")
+        if (originalPoster == null || originalPoster.contains("mlsbdshop")) {
+            originalPoster = doc.select("img").firstOrNull { it.attr("src").contains("uploads/images") }?.attr("src") ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
         }
 
-        // --- Perfect Storyline Extraction ---
+        // Storyline Extraction
         var description = doc.selectFirst("div.storyline")?.text()
-            ?.replace(Regex("(?i)Storyline\\s*:"), "")
-            ?.trim()
+            ?.replace(Regex("(?i)Storyline\\s*:"), "")?.trim()
 
         if (description.isNullOrBlank()) {
             description = doc.selectFirst("meta[property=og:description]")?.attr("content")
@@ -107,10 +277,21 @@ class MlsbdProvider : MainAPI() {
             }
         }
 
+        // IMDB ID Extraction
+        val imdbId = doc.selectFirst("a[href*='imdb.com/title']")?.attr("href")
+            ?.substringAfter("title/")?.substringBefore("/")?.takeIf { it.startsWith("tt") }
+
         val contentArea = doc.selectFirst("div.entry-content, div.post-content, div.content")
         val isSeries = rawTitle.contains("Episode", true) || rawTitle.contains("Season", true) || 
                        url.contains("episode", true) || url.contains("season", true) || 
                        (contentArea?.text()?.contains(Regex("(?i)(Download Now Epi|Download Episode|Episode \\d+)")) == true)
+
+        // Fetching TMDB Assets using IMDB ID (Priority) or Clean Title + Year
+        val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year, imdbId)
+        
+        val finalPoster = tmdbAssets.poster ?: originalPoster
+        val finalBackdrop = tmdbAssets.backdrop ?: finalPoster
+        val finalLogo = tmdbAssets.logo
 
         if (isSeries && contentArea != null) {
             val episodes = mutableListOf<Episode>()
@@ -173,15 +354,18 @@ class MlsbdProvider : MainAPI() {
                     this.name = "Episode $epNum"
                     this.episode = epNum
                     this.season = parsedSeason
-                    this.posterUrl = poster
+                    this.posterUrl = finalPoster
                 })
             }
             
             val sortedEpisodes = episodes.distinctBy { it.data }.sortedBy { it.episode }
 
-            return newTvSeriesLoadResponse(title, url, TvType.TvSeries, sortedEpisodes) {
-                this.posterUrl = poster
+            return newTvSeriesLoadResponse(rawTitle, url, TvType.TvSeries, sortedEpisodes) {
+                this.posterUrl = finalPoster
+                this.backgroundPosterUrl = finalBackdrop
+                this.logoUrl = finalLogo
                 this.plot = description
+                this.year = year
             }
         } else {
             val iframes = doc.select("iframe").mapNotNull { it.attr("src") }.filter { it.startsWith("http") }.map { "$it|Unknown" }
@@ -199,9 +383,12 @@ class MlsbdProvider : MainAPI() {
             }
             val dataStr = (iframes + links).distinct().joinToString(",")
             
-            return newMovieLoadResponse(title, url, TvType.Movie, dataStr) {
-                this.posterUrl = poster
+            return newMovieLoadResponse(rawTitle, url, TvType.Movie, dataStr) {
+                this.posterUrl = finalPoster
+                this.backgroundPosterUrl = finalBackdrop
+                this.logoUrl = finalLogo
                 this.plot = description
+                this.year = year
             }
         }
     }
