@@ -176,7 +176,12 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
-    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+     override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
         if (data.isBlank()) return false
         val urls = data.split(",")
 
@@ -193,22 +198,30 @@ class MlsbdProvider : MainAPI() {
         val sortedUrls = urls.sortedBy { getQualityScore(it.substringAfterLast("|", "Unknown")) }
 
         suspend fun invokeExtractor(targetUrl: String, referer: String?) {
-            if (targetUrl.contains("gdflix", true)) GDFlix().getUrl(targetUrl, referer, subtitleCallback, callback)
-            else if (targetUrl.contains("hubcloud", true)) HubCloud().getUrl(targetUrl, referer, subtitleCallback, callback)
-            else if (targetUrl.contains("filepress", true) || targetUrl.contains("filebee", true)) FilePress().getUrl(targetUrl, referer, subtitleCallback, callback)
-            else if (targetUrl.contains("minochinos", true)) Minochinos().getUrl(targetUrl, referer, subtitleCallback, callback)
-            else if (targetUrl.contains("luluvid", true)) Luluvid().getUrl(targetUrl, referer, subtitleCallback, callback)
-            else if (targetUrl.contains("dsvplay", true) || targetUrl.contains("playmogo", true)) {
-                loadExtractor(targetUrl.replace("dsvplay.com", "dood.to").replace("playmogo.com", "dood.to"), subtitleCallback, callback)
+            try {
+                if (targetUrl.contains("gdflix", true)) GDFlix().getUrl(targetUrl, referer, subtitleCallback, callback)
+                else if (targetUrl.contains("hubcloud", true)) HubCloud().getUrl(targetUrl, referer, subtitleCallback, callback)
+                else if (targetUrl.contains("filepress", true) || targetUrl.contains("filebee", true)) FilePress().getUrl(targetUrl, referer, subtitleCallback, callback)
+                else if (targetUrl.contains("minochinos", true)) Minochinos().getUrl(targetUrl, referer, subtitleCallback, callback)
+                else if (targetUrl.contains("luluvid", true)) Luluvid().getUrl(targetUrl, referer, subtitleCallback, callback)
+                else if (targetUrl.contains("dsvplay", true) || targetUrl.contains("playmogo", true)) {
+                    loadExtractor(targetUrl.replace("dsvplay.com", "dood.to").replace("playmogo.com", "dood.to"), subtitleCallback, callback)
+                }
+                else if (targetUrl.contains("morencius", true)) {
+                    loadExtractor(targetUrl.replace("morencius.com", "filemoon.sx"), subtitleCallback, callback)
+                }
+                else loadExtractor(targetUrl, subtitleCallback, callback)
+            } catch (e: Exception) {
+                // If the extractor fails (e.g., video deleted), it will catch the error here
+                // and the loop will continue to process the next link.
+                e.printStackTrace()
             }
-            else if (targetUrl.contains("morencius", true)) {
-                loadExtractor(targetUrl.replace("morencius.com", "filemoon.sx"), subtitleCallback, callback)
-            }
-            else loadExtractor(targetUrl, subtitleCallback, callback)
         }
 
-        sortedUrls.forEach { item ->
-            if (item.isBlank()) return@forEach
+        // Using apmap instead of forEach is highly recommended in Cloudstream
+        // for parallel execution, making loading much faster.
+        sortedUrls.apmap { item ->
+            if (item.isBlank()) return@apmap
             val parts = item.split("|")
             val url = parts[0].trim()
             val qualityStr = if (parts.size > 1) parts[1] else "Unknown"
@@ -220,23 +233,24 @@ class MlsbdProvider : MainAPI() {
                         val urlRegex = Regex("(?i)https?://[^\\s\"'<]+")
                         val validHosts = listOf("gdflix", "hubcloud", "filepress", "minochinos", "luluvid", "dsvplay", "vimeo", "drive", "pixeldrain", "filemoon", "vidmoly", "streamwish", "streamtape", "doodstream", "gofile", "gdtot")
                         
-                        // Fallback to a tags as well
                         val doc = org.jsoup.Jsoup.parse(slHtml)
                         val aLinks = doc.select("a").mapNotNull { it.attr("abs:href") }
                         
                         val allLinks = (urlRegex.findAll(slHtml).map { it.value }.toList() + aLinks).distinct()
                         
-                        allLinks.forEach { slUrl ->
+                        allLinks.apmap { slUrl ->
                             if (validHosts.any { slUrl.contains(it, true) }) {
                                 invokeExtractor(slUrl, url)
                             }
                         }
-                    } catch (e: Exception) {}
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 } else {
+                    // This was missing error handling before. Now invokeExtractor handles it internally.
                     invokeExtractor(url, url)
                 }
             }
         }
         return true
     }
-}
