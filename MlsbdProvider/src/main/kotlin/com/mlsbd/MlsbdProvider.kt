@@ -176,7 +176,12 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
-    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+        override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
         if (data.isBlank()) return false
         val urls = data.split(",")
 
@@ -192,20 +197,46 @@ class MlsbdProvider : MainAPI() {
 
         val sortedUrls = urls.sortedBy { getQualityScore(it.substringAfterLast("|", "Unknown")) }
 
+        // This custom callback modifies the long name before sending it to Cloudstream UI
+        val customCallback: (ExtractorLink) -> Unit = { link ->
+            var newName = link.name
+            
+            // If the name has something like "Hub-Cloud[Pixeldrain] MovieName..."
+            if (newName.contains("] ")) {
+                // Cut everything after the first "] " and keep the closing bracket "]"
+                newName = newName.substringBefore("] ") + "]"
+            }
+            
+            // Create a new link object with the cleanly formatted short name
+            val modifiedLink = ExtractorLink(
+                source = link.source,
+                name = newName,
+                url = link.url,
+                referer = link.referer,
+                quality = link.quality, // Cloudstream handles the quality text like 1080p
+                isM3u8 = link.isM3u8,
+                headers = link.headers,
+                extractorData = link.extractorData
+            )
+            
+            // Send to the original callback
+            callback.invoke(modifiedLink)
+        }
+
         suspend fun invokeExtractor(targetUrl: String, referer: String?) {
             try {
-                if (targetUrl.contains("gdflix", true)) GDFlix().getUrl(targetUrl, referer, subtitleCallback, callback)
-                else if (targetUrl.contains("hubcloud", true)) HubCloud().getUrl(targetUrl, referer, subtitleCallback, callback)
-                else if (targetUrl.contains("filepress", true) || targetUrl.contains("filebee", true)) FilePress().getUrl(targetUrl, referer, subtitleCallback, callback)
-                else if (targetUrl.contains("minochinos", true)) Minochinos().getUrl(targetUrl, referer, subtitleCallback, callback)
-                else if (targetUrl.contains("luluvid", true)) Luluvid().getUrl(targetUrl, referer, subtitleCallback, callback)
+                if (targetUrl.contains("gdflix", true)) GDFlix().getUrl(targetUrl, referer, subtitleCallback, customCallback)
+                else if (targetUrl.contains("hubcloud", true)) HubCloud().getUrl(targetUrl, referer, subtitleCallback, customCallback)
+                else if (targetUrl.contains("filepress", true) || targetUrl.contains("filebee", true)) FilePress().getUrl(targetUrl, referer, subtitleCallback, customCallback)
+                else if (targetUrl.contains("minochinos", true)) Minochinos().getUrl(targetUrl, referer, subtitleCallback, customCallback)
+                else if (targetUrl.contains("luluvid", true)) Luluvid().getUrl(targetUrl, referer, subtitleCallback, customCallback)
                 else if (targetUrl.contains("dsvplay", true) || targetUrl.contains("playmogo", true)) {
-                    loadExtractor(targetUrl.replace("dsvplay.com", "dood.to").replace("playmogo.com", "dood.to"), subtitleCallback, callback)
+                    loadExtractor(targetUrl.replace("dsvplay.com", "dood.to").replace("playmogo.com", "dood.to"), subtitleCallback, customCallback)
                 }
                 else if (targetUrl.contains("morencius", true)) {
-                    loadExtractor(targetUrl.replace("morencius.com", "filemoon.sx"), subtitleCallback, callback)
+                    loadExtractor(targetUrl.replace("morencius.com", "filemoon.sx"), subtitleCallback, customCallback)
                 }
-                else loadExtractor(targetUrl, subtitleCallback, callback)
+                else loadExtractor(targetUrl, subtitleCallback, customCallback)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
