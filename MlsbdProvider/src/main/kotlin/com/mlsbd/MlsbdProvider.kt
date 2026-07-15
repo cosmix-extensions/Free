@@ -176,7 +176,7 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
-     override suspend fun loadLinks(
+         override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -213,44 +213,43 @@ class MlsbdProvider : MainAPI() {
                 else loadExtractor(targetUrl, subtitleCallback, callback)
             } catch (e: Exception) {
                 // If the extractor fails (e.g., video deleted), it will catch the error here
-                // and the loop will continue to process the next link.
                 e.printStackTrace()
             }
         }
 
-        // Using apmap instead of forEach is highly recommended in Cloudstream
-        // for parallel execution, making loading much faster.
-        sortedUrls.apmap { item ->
-            if (item.isBlank()) return@apmap
-            val parts = item.split("|")
-            val url = parts[0].trim()
-            val qualityStr = if (parts.size > 1) parts[1] else "Unknown"
+        // Using amap instead of apmap for suspended contexts
+        sortedUrls.amap { item ->
+            if (item.isNotBlank()) {
+                val parts = item.split("|")
+                val url = parts[0].trim()
 
-            if (url.startsWith("http")) {
-                if (url.contains("savelinks", true)) {
-                    try {
-                        val slHtml = app.get(url, headers = ua, timeout = 60).text
-                        val urlRegex = Regex("(?i)https?://[^\\s\"'<]+")
-                        val validHosts = listOf("gdflix", "hubcloud", "filepress", "minochinos", "luluvid", "dsvplay", "vimeo", "drive", "pixeldrain", "filemoon", "vidmoly", "streamwish", "streamtape", "doodstream", "gofile", "gdtot")
-                        
-                        val doc = org.jsoup.Jsoup.parse(slHtml)
-                        val aLinks = doc.select("a").mapNotNull { it.attr("abs:href") }
-                        
-                        val allLinks = (urlRegex.findAll(slHtml).map { it.value }.toList() + aLinks).distinct()
-                        
-                        allLinks.apmap { slUrl ->
-                            if (validHosts.any { slUrl.contains(it, true) }) {
-                                invokeExtractor(slUrl, url)
+                if (url.startsWith("http")) {
+                    if (url.contains("savelinks", true)) {
+                        try {
+                            val slHtml = app.get(url, headers = ua, timeout = 60).text
+                            val urlRegex = Regex("(?i)https?://[^\\s\"'<]+")
+                            val validHosts = listOf("gdflix", "hubcloud", "filepress", "minochinos", "luluvid", "dsvplay", "vimeo", "drive", "pixeldrain", "filemoon", "vidmoly", "streamwish", "streamtape", "doodstream", "gofile", "gdtot")
+                            
+                            val doc = org.jsoup.Jsoup.parse(slHtml)
+                            val aLinks = doc.select("a").mapNotNull { it.attr("abs:href") }
+                            
+                            val allLinks = (urlRegex.findAll(slHtml).map { it.value }.toList() + aLinks).distinct()
+                            
+                            // Using amap here as well
+                            allLinks.amap { slUrl ->
+                                if (validHosts.any { slUrl.contains(it, true) }) {
+                                    invokeExtractor(slUrl, url)
+                                }
                             }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                         }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
+                    } else {
+                        invokeExtractor(url, url)
                     }
-                } else {
-                    // This was missing error handling before. Now invokeExtractor handles it internally.
-                    invokeExtractor(url, url)
                 }
             }
         }
+        
         return true
     }
