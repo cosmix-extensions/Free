@@ -95,10 +95,23 @@ class MlsbdProvider : MainAPI() {
             poster = doc.select("img").firstOrNull { it.attr("src").contains("uploads/images") }?.attr("src") ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
         }
 
-        var description = doc.selectFirst("meta[property=og:description]")?.attr("content")
-        if (description == null || description.contains("Storyline :")) {
-            description = doc.select("div.entry-content p, div.post-content p").firstOrNull { it.text().contains("Storyline") || it.text().contains("Director") }?.text()?.trim() ?: doc.title().trim()
+        // --- NEW: Perfect Storyline Extraction ---
+        var description = doc.selectFirst("div.storyline")?.text()
+            ?.replace(Regex("(?i)Storyline\\s*:"), "") // Removes the "Storyline :" text
+            ?.trim()
+
+        // Fallback if the new storyline class isn't found on older posts
+        if (description.isNullOrBlank()) {
+            description = doc.selectFirst("meta[property=og:description]")?.attr("content")
+            if (description == null || description.contains("Storyline :")) {
+                description = doc.select("div.entry-content p, div.post-content p").firstOrNull { it.text().contains("Storyline") || it.text().contains("Director") }?.text()?.trim() ?: doc.title().trim()
+            }
         }
+
+        // --- NEW: Perfect Rating Extraction ---
+        // Converts "6.2/10" -> 6.2 -> 6200 (Cloudstream format)
+        val ratingText = doc.selectFirst("div.star-imdb")?.text()?.substringBefore("/")?.trim()
+        val rating = ratingText?.toFloatOrNull()?.let { (it * 1000).toInt() }
 
         val contentArea = doc.selectFirst("div.entry-content, div.post-content, div.content")
         val isSeries = rawTitle.contains("Episode", true) || rawTitle.contains("Season", true) || 
@@ -175,6 +188,7 @@ class MlsbdProvider : MainAPI() {
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, sortedEpisodes) {
                 this.posterUrl = poster
                 this.plot = description
+                this.rating = rating // Added Rating
             }
         } else {
             val iframes = doc.select("iframe").mapNotNull { it.attr("src") }.filter { it.startsWith("http") }.map { "$it|Unknown" }
@@ -195,6 +209,7 @@ class MlsbdProvider : MainAPI() {
             return newMovieLoadResponse(title, url, TvType.Movie, dataStr) {
                 this.posterUrl = poster
                 this.plot = description
+                this.rating = rating // Added Rating
             }
         }
     }
