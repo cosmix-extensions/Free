@@ -521,7 +521,10 @@ class MlsbdProvider : MainAPI() {
                                            "filemoon", "vidmoly", "streamwish", "streamtape",
                                            "doodstream", "gofile", "gdtot")
                     val aLinks   = slDoc.select("a").mapNotNull { it.attr("abs:href") }
-                    val allLinks = (urlRegex.findAll(slHtml).map { it.value } + aLinks).distinct()
+                    
+                    // Fixed line: Added .toList()
+                    val allLinks = (urlRegex.findAll(slHtml).map { it.value }.toList() + aLinks).distinct()
+                    
                     allLinks.amap { slUrl ->
                         if (validHosts.any { slUrl.contains(it, true) }) invokeExtractor(slUrl, url)
                     }
