@@ -6,7 +6,7 @@ import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-// --- TMDB API Constants (Moved globally to prevent unresolved reference errors) ---
+// --- TMDB API Constants ---
 const val TMDB_API = "https://api.themoviedb.org/3"
 const val TMDB_KEY = "1865f43a0549ca50d341dd9ab8b29f49"
 const val TMDB_IMG = "https://image.tmdb.org/t/p/original"
@@ -14,8 +14,8 @@ const val TMDB_IMG = "https://image.tmdb.org/t/p/original"
 // --- TMDB Data Classes ---
 data class TmdbImages(
     @JsonProperty("logos") val logos: List<TmdbImage>? = null,
-    @JsonProperty("backdrops") val backdrops: List<TmdbImage>? = null,
-    @JsonProperty("posters") val posters: List<TmdbImage>? = null
+    @JsonProperty("backdrops") val backdrops: List<TmdbImage>? = null
+    // Removed posters from TMDB as we strictly use the website's poster
 )
 data class TmdbImage(
     @JsonProperty("file_path") val filePath: String? = null,
@@ -36,7 +36,8 @@ data class TmdbResult(
 data class TmdbSearch(
     @JsonProperty("results") val results: List<TmdbResult>? = null
 )
-data class TmdbAssets(val poster: String?, val logo: String?, val backdrop: String?)
+// Removed poster from TmdbAssets
+data class TmdbAssets(val logo: String?, val backdrop: String?)
 // -------------------------
 
 class MlsbdProvider : MainAPI() {
@@ -49,7 +50,7 @@ class MlsbdProvider : MainAPI() {
     // Standard User-Agent for network requests
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    // --- Helper Functions for Title & TMDB Logic (100% Crash-Proof for Old Cloudstream) ---
+    // --- Helper Functions for Title & TMDB Logic ---
     
     // Extracts year from title formatted as (YYYY) or (YYYY-YYYY)
     private fun getYearFromTitle(rawTitle: String): Int? {
@@ -119,7 +120,8 @@ class MlsbdProvider : MainAPI() {
             ?: candidates.first()
     }
 
-    // Fetches metadata (Poster, Logo, Backdrop) from TMDB API
+    // Fetches metadata (Logo, Backdrop) from TMDB API
+    // Posters are intentionally NOT fetched here to force usage of website's posters
     private suspend fun fetchTmdbAssets(title: String, isSeries: Boolean, year: Int?, imdbId: String? = null): TmdbAssets {
         return try {
             var tmdbId: Int? = null
@@ -164,17 +166,10 @@ class MlsbdProvider : MainAPI() {
                 }
             }
 
-            if (tmdbId == null) return TmdbAssets(null, null, null)
+            if (tmdbId == null) return TmdbAssets(null, null)
 
             // Fetch specific images for the matched TMDB ID
             val images = app.get("$TMDB_API/$actualMediaType/$tmdbId/images?api_key=$TMDB_KEY").parsedSafe<TmdbImages>()
-
-            // Prioritize English, then null language, then Bengali/Hindi for images
-            val poster = images?.posters?.firstOrNull { it.lang == "en" }
-                ?: images?.posters?.firstOrNull { it.lang == null }
-                ?: images?.posters?.firstOrNull { it.lang == "bn" }
-                ?: images?.posters?.firstOrNull { it.lang == "hi" }
-                ?: images?.posters?.firstOrNull()
 
             val logo = images?.logos?.firstOrNull { it.lang == "en" }
                 ?: images?.logos?.firstOrNull { it.lang == null }
@@ -188,14 +183,13 @@ class MlsbdProvider : MainAPI() {
                 ?: images?.backdrops?.firstOrNull { it.lang == "hi" }
                 ?: images?.backdrops?.firstOrNull()
 
-            val posterUrl = poster?.filePath?.let { "$TMDB_IMG$it" }
             val logoUrl = logo?.filePath?.let { "$TMDB_IMG$it" }
             val backdropUrl = backdrop?.filePath?.let { "$TMDB_IMG$it" }
 
-            TmdbAssets(posterUrl, logoUrl, backdropUrl)
+            TmdbAssets(logoUrl, backdropUrl)
 
         } catch (e: Exception) {
-            TmdbAssets(null, null, null)
+            TmdbAssets(null, null)
         }
     }
 
@@ -229,14 +223,10 @@ class MlsbdProvider : MainAPI() {
             val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@amap null
             
             val displayTitle = getDisplayTitle(rawTitle)
-            val cleanTitle = cleanTitleForTmdb(rawTitle)
-            val year = getYearFromTitle(rawTitle)
-            
-            val originalPoster = el.selectFirst("div.thumb img")?.attr("src")
             val isSeries = rawTitle.contains("Season", true) || rawTitle.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
             
-            val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year)
-            val finalPoster = tmdbAssets.poster ?: originalPoster
+            // Strictly using website's poster. Removed TMDB call to speed up main page loading.
+            val finalPoster = el.selectFirst("div.thumb img")?.attr("src")
             
             if (isSeries) newTvSeriesSearchResponse(displayTitle, href, TvType.TvSeries) { this.posterUrl = finalPoster }
             else newMovieSearchResponse(displayTitle, href, TvType.Movie) { this.posterUrl = finalPoster }
@@ -257,14 +247,10 @@ class MlsbdProvider : MainAPI() {
             val rawTitle = el.selectFirst("h2.post-title")?.text()?.trim() ?: return@amap null
             
             val displayTitle = getDisplayTitle(rawTitle)
-            val cleanTitle = cleanTitleForTmdb(rawTitle)
-            val year = getYearFromTitle(rawTitle)
-            
-            val originalPoster = el.selectFirst("div.thumb img")?.attr("src")
             val isSeries = rawTitle.contains("Season", true) || rawTitle.contains("Episode", true) || href.contains("series", true) || href.contains("season", true) || href.contains("episode", true)
             
-            val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year)
-            val finalPoster = tmdbAssets.poster ?: originalPoster
+            // Strictly using website's poster here as well.
+            val finalPoster = el.selectFirst("div.thumb img")?.attr("src")
             
             if (isSeries) newTvSeriesSearchResponse(displayTitle, href, TvType.TvSeries) { this.posterUrl = finalPoster }
             else newMovieSearchResponse(displayTitle, href, TvType.Movie) { this.posterUrl = finalPoster }
@@ -282,7 +268,7 @@ class MlsbdProvider : MainAPI() {
         val cleanTitle = cleanTitleForTmdb(rawTitle)
         val year = getYearFromTitle(rawTitle)
 
-        // Find poster on load page
+        // Find poster on load page natively from website
         var originalPoster = doc.selectFirst("div.entry-content img.aligncenter, div.post-content img, div.content img")?.attr("src")
         if (originalPoster == null || originalPoster.contains("mlsbdshop")) {
             originalPoster = doc.select("img").firstOrNull { it.attr("src").contains("uploads/images") }?.attr("src") ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
@@ -307,9 +293,11 @@ class MlsbdProvider : MainAPI() {
                        url.contains("episode", true) || url.contains("season", true) || 
                        (contentArea?.text()?.contains(Regex("(?i)(Download Now Epi|Download Episode|Episode \\d+)")) == true)
 
+        // Only fetch TMDB for Backdrop and Logo
         val tmdbAssets = fetchTmdbAssets(cleanTitle, isSeries, year, imdbId)
         
-        val finalPoster = tmdbAssets.poster ?: originalPoster
+        // Finalized specific assets
+        val finalPoster = originalPoster // Forcing usage of website's poster only
         val finalBackdrop = tmdbAssets.backdrop ?: finalPoster
         val finalLogo = tmdbAssets.logo
 
