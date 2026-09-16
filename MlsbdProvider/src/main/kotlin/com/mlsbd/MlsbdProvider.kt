@@ -46,10 +46,12 @@ class MlsbdProvider : MainAPI() {
     override val hasMainPage = true
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Movie, TvType.Anime)
 
+    // Standard User-Agent for network requests
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
     // --- Helper Functions for Title & TMDB Logic (100% Crash-Proof for Old Cloudstream) ---
     
+    // Extracts year from title formatted as (YYYY) or (YYYY-YYYY)
     private fun getYearFromTitle(rawTitle: String): Int? {
         val doubleMatch = Regex("\\((\\d{4})-\\d{4}\\)").find(rawTitle)
         if (doubleMatch != null) {
@@ -62,6 +64,7 @@ class MlsbdProvider : MainAPI() {
         return null
     }
 
+    // Formats title for display on the UI
     private fun getDisplayTitle(rawTitle: String): String {
         val doubleMatch = Regex("\\(\\d{4}-\\d{4}\\)").find(rawTitle)
         if (doubleMatch != null) {
@@ -74,6 +77,7 @@ class MlsbdProvider : MainAPI() {
         return rawTitle.trim()
     }
 
+    // Cleans title for better TMDB search accuracy
     private fun cleanTitleForTmdb(rawTitle: String): String {
         var clean = rawTitle.replace(Regex("^\\[.*?]\\s*"), "")
         
@@ -105,7 +109,7 @@ class MlsbdProvider : MainAPI() {
 
     private fun yearMatches(tmdbYear: Int?, siteYear: Int?): Boolean {
         if (siteYear == null || tmdbYear == null) return true
-        return Math.abs(tmdbYear - siteYear) <= 1
+        return Math.abs(tmdbYear - siteYear) <= 1 // Allow 1 year difference
     }
 
     private fun pickBestResult(candidates: List<TmdbResult>, siteYear: Int?): TmdbResult? {
@@ -115,11 +119,13 @@ class MlsbdProvider : MainAPI() {
             ?: candidates.first()
     }
 
+    // Fetches metadata (Poster, Logo, Backdrop) from TMDB API
     private suspend fun fetchTmdbAssets(title: String, isSeries: Boolean, year: Int?, imdbId: String? = null): TmdbAssets {
         return try {
             var tmdbId: Int? = null
             var actualMediaType = if (isSeries) "tv" else "movie"
 
+            // Attempt to find by IMDB ID first
             if (imdbId != null && imdbId.startsWith("tt")) {
                 val findRes = app.get("$TMDB_API/find/$imdbId?api_key=$TMDB_KEY&external_source=imdb_id").parsedSafe<TmdbFind>()
                 val tvId = findRes?.tvShows?.firstOrNull()?.id
@@ -131,6 +137,7 @@ class MlsbdProvider : MainAPI() {
                 else if (tvId != null) { tmdbId = tvId; actualMediaType = "tv" }
             }
 
+            // Fallback to text search if IMDB ID fails or is not provided
             if (tmdbId == null) {
                 val safeTitle = encodeUri(title)
                 val searchRes = app.get("$TMDB_API/search/multi?api_key=$TMDB_KEY&query=$safeTitle").parsedSafe<TmdbSearch>()
@@ -159,8 +166,10 @@ class MlsbdProvider : MainAPI() {
 
             if (tmdbId == null) return TmdbAssets(null, null, null)
 
+            // Fetch specific images for the matched TMDB ID
             val images = app.get("$TMDB_API/$actualMediaType/$tmdbId/images?api_key=$TMDB_KEY").parsedSafe<TmdbImages>()
 
+            // Prioritize English, then null language, then Bengali/Hindi for images
             val poster = images?.posters?.firstOrNull { it.lang == "en" }
                 ?: images?.posters?.firstOrNull { it.lang == null }
                 ?: images?.posters?.firstOrNull { it.lang == "bn" }
@@ -190,6 +199,8 @@ class MlsbdProvider : MainAPI() {
         }
     }
 
+    // --- Main Page Categories ---
+    // Removed categories: Klikk, Unrated, Ullu, Horror, Japanese, MX Player, Chorki
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Latest Movies",
         "$mainUrl/category/bollywood-movies/" to "Bollywood",
@@ -202,14 +213,7 @@ class MlsbdProvider : MainAPI() {
         "$mainUrl/category/tv-series/" to "TV Series",
         "$mainUrl/category/anime/" to "Anime",
         "$mainUrl/category/animation-movies/" to "Animation",
-        "$mainUrl/category/klikk/" to "Klikk",
-        "$mainUrl/category/chorki-originals/" to "Chorki",
-        "$mainUrl/category/mx-player/" to "MX Player",
-        "$mainUrl/category/south-indian-movies/" to "South Indian",
-        "$mainUrl/category/foreign-language-film/japanese-movie/" to "Japanese",
-        "$mainUrl/category/horror-movies/" to "Horror",
-        "$mainUrl/category/unrated/ullu/" to "Ullu",
-        "$mainUrl/category/unrated/" to "Unrated"
+        "$mainUrl/category/south-indian-movies/" to "South Indian"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -278,11 +282,13 @@ class MlsbdProvider : MainAPI() {
         val cleanTitle = cleanTitleForTmdb(rawTitle)
         val year = getYearFromTitle(rawTitle)
 
+        // Find poster on load page
         var originalPoster = doc.selectFirst("div.entry-content img.aligncenter, div.post-content img, div.content img")?.attr("src")
         if (originalPoster == null || originalPoster.contains("mlsbdshop")) {
             originalPoster = doc.select("img").firstOrNull { it.attr("src").contains("uploads/images") }?.attr("src") ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
         }
 
+        // Fetch description/storyline
         var description = doc.selectFirst("div.storyline")?.text()
             ?.replace(Regex("(?i)Storyline\\s*:"), "")?.trim()
 
@@ -307,6 +313,7 @@ class MlsbdProvider : MainAPI() {
         val finalBackdrop = tmdbAssets.backdrop ?: finalPoster
         val finalLogo = tmdbAssets.logo
 
+        // Parse episodes if it's a TV series
         if (isSeries && contentArea != null) {
             val episodes = mutableListOf<Episode>()
             var currentEpNum = 1
@@ -318,6 +325,7 @@ class MlsbdProvider : MainAPI() {
             for (tag in contentArea.children()) {
                 val text = tag.text().trim()
                 
+                // Track current episode number based on headers/paragraphs
                 val headerEpMatch = Regex("(?i)(?:Epi|Ep|Episode)[- ]?(\\d+)").find(text)
                 if (headerEpMatch != null && tag.tagName() in listOf("h2", "h3", "h4", "p", "div", "strong", "b")) {
                     currentEpNum = headerEpMatch.groupValues[1].toInt()
@@ -382,6 +390,7 @@ class MlsbdProvider : MainAPI() {
                 this.year = year
             }
         } else {
+            // Logic for Movie Load Response
             val iframes = doc.select("iframe").mapNotNull { it.attr("src") }.filter { it.startsWith("http") }.map { "$it|Unknown" }
             val links = doc.select("a").mapNotNull { a -> 
                 val href = a.attr("abs:href")
@@ -428,6 +437,7 @@ class MlsbdProvider : MainAPI() {
 
         val sortedUrls = urls.sortedBy { getQualityScore(it.substringAfterLast("|", "Unknown")) }
 
+        // Cleans extractor link names dynamically
         val customCallback: (ExtractorLink) -> Unit = { link ->
             var newName = link.name
             
@@ -446,6 +456,7 @@ class MlsbdProvider : MainAPI() {
             callback.invoke(link)
         }
 
+        // Resolves extractors for different streaming hosts
         suspend fun invokeExtractor(targetUrl: String, referer: String?) {
             try {
                 if (targetUrl.contains("gdflix", true)) GDFlix().getUrl(targetUrl, referer, subtitleCallback, customCallback)
@@ -480,6 +491,7 @@ class MlsbdProvider : MainAPI() {
 
                 if (url.startsWith("http")) {
                     if (url.contains("savelinks", true)) {
+                        // Extract specific streaming servers from savelinks redirect pages
                         try {
                             val slHtml = app.get(url, headers = ua, timeout = 60).text
                             val urlRegex = Regex("(?i)https?://[^\\s\"'<]+")
