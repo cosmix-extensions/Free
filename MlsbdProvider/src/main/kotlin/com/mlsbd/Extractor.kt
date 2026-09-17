@@ -236,6 +236,9 @@ open class GDFlix : ExtractorApi() {
 
             when {
                 text.contains("Instant DL", ignoreCase = true) -> {
+                    // The Instant DL extraction logic is kept here but disabled as requested.
+                    // To re-enable, simply remove the /* and */ block comments below.
+                    /*
                     runCatching {
                         val location = app.get(link, allowRedirects = false).headers["location"] ?: app.get(link, allowRedirects = false).headers["Location"].orEmpty()
                         var videoUrl = if (location.contains("?url=")) location.substringAfter("?url=") else location
@@ -259,6 +262,7 @@ open class GDFlix : ExtractorApi() {
                             )
                         }
                     }
+                    */
                 }
                 text.contains("CLOUD DOWNLOAD", ignoreCase = true) -> {
                     val finalLink = if (link.startsWith("http")) link else "$baseUrl$link"
@@ -463,9 +467,3 @@ class GoflixSbs : ExtractorApi() {
         }
     }
 }
-
-
-
-
-
-
